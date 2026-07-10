@@ -58,11 +58,11 @@ test("file messages are sensitive-review with metadata-only refs", () => {
   assert.deepEqual(Object.keys(fileEnvelope.file_refs[0]!).sort(), ["id", "mimetype", "name", "size"]);
 });
 
-test("edited message carries edited_ts and version 2", () => {
+test("edited message carries edited_ts; version stays 1 until the store observes an edit", () => {
   const envelopes = new EnvelopeBuilder(billingThread()).build();
 
   assert.equal(envelopes[1]!.edited_ts, "1700000120.000000");
-  assert.equal(envelopes[1]!.version, 2);
+  assert.equal(envelopes[1]!.version, 1);
 });
 
 test("billing file intake classifies agent-required", () => {
