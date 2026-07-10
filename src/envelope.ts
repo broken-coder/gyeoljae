@@ -28,8 +28,10 @@ export class EnvelopeBuilder {
       channel_id: this.document.channel_id,
       thread_ts: this.document.thread_ts,
       message_ts: message.ts,
+      // Version counts edit states observed by the store (see ShadowStore.nextVersion);
+      // the builder always emits 1 regardless of whether the message arrives pre-edited.
       edited_ts: editedTs,
-      version: editedTs === null ? 1 : 2,
+      version: 1,
       permalink: message.permalink ?? null,
       ledger_ref: this.document.ledger_ref,
       intake_kind: this.intakeKind(text, fileRefs),

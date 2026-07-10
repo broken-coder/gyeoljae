@@ -56,6 +56,7 @@ npm test
 - [x] Shadow store + replay planner port
 - [x] Slack inbound poller (one-shot, cron/launchd friendly)
 - [ ] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
+- [ ] Redaction pipeline port (redaction_status/manifest envelope fields)
 - [ ] Slack Socket Mode listener for real-time approval replies
 - [ ] GitHub Issues ledger adapter
 - [ ] Docker packaging

@@ -35,12 +35,12 @@ test("token file accepts raw and nested-JSON tokens", () => {
   const dir = mkdtempSync(join(tmpdir(), "gyeoljae-"));
   try {
     const raw = join(dir, "raw");
-    writeFileSync(raw, "xoxb-not-a-real-token\n");
-    assert.equal(readTokenFile(raw), "xoxb-not-a-real-token");
+    writeFileSync(raw, "xoxb-test\n");
+    assert.equal(readTokenFile(raw), "xoxb-test");
 
     const nested = join(dir, "nested.json");
-    writeFileSync(nested, JSON.stringify({ slack: { accounts: [{ botToken: "xoxb-nested-not-real" }] } }));
-    assert.equal(readTokenFile(nested), "xoxb-nested-not-real");
+    writeFileSync(nested, JSON.stringify({ slack: { accounts: [{ botToken: "xoxb-fake" }] } }));
+    assert.equal(readTokenFile(nested), "xoxb-fake");
 
     const bad = join(dir, "bad");
     writeFileSync(bad, "not-a-token");
