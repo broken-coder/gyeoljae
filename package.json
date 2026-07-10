@@ -1,0 +1,23 @@
+{
+  "name": "gyeoljae",
+  "version": "0.0.1",
+  "description": "Human-in-the-loop approval bridge between your ops ledger and your messenger",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/broken-coder/gyeoljae.git"
+  },
+  "keywords": ["slack", "approval", "human-in-the-loop", "chatops", "agents", "bridge"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
