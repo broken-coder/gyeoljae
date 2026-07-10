@@ -14,7 +14,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test \"dist/tests/**/*.test.js\""
+    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
+    "check:sanitize": "node scripts/sanitize-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
