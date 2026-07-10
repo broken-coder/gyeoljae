@@ -53,7 +53,7 @@ npm test
 ## Roadmap
 
 - [x] Core: envelope builder, classifier (ported, golden-spec tested)
-- [ ] Shadow store + replay planner port
+- [x] Shadow store + replay planner port
 - [ ] Slack inbound poller (one-shot, cron/launchd friendly)
 - [ ] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
 - [ ] Slack Socket Mode listener for real-time approval replies
