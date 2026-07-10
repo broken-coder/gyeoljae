@@ -47,6 +47,8 @@ export type ActionClass =
   | "agent-required"
   | "needs-human";
 
+import type { RedactionManifest } from "./redaction/pipeline.js";
+
 export interface Envelope {
   source: string;
   channel_id: string;
@@ -65,6 +67,11 @@ export interface Envelope {
   dedup_key: string;
   recorded_at: string;
   recorded_by: string;
+  /** "clean" when the scanner found nothing; "redacted" when tokens were substituted. */
+  redaction_status: "clean" | "redacted";
+  /** Message text with each secret/PII finding replaced by an HMAC-derived token. */
+  redacted_text: string;
+  redaction_manifest: RedactionManifest;
   /** Internal only: source text for deterministic classification. Stripped before any persistence or output. */
   shadow_source_text?: string;
 }
