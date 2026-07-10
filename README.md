@@ -54,7 +54,7 @@ npm test
 
 - [x] Core: envelope builder, classifier (ported, golden-spec tested)
 - [x] Shadow store + replay planner port
-- [ ] Slack inbound poller (one-shot, cron/launchd friendly)
+- [x] Slack inbound poller (one-shot, cron/launchd friendly)
 - [ ] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
 - [ ] Slack Socket Mode listener for real-time approval replies
 - [ ] GitHub Issues ledger adapter

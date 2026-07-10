@@ -1,5 +1,3 @@
-import type { ThreadMessage } from "./types.js";
-
 /**
  * Compares two Slack-style timestamps ("1700000000.000100") as
  * (seconds, sequence) integer tuples, not as strings or floats.
@@ -16,13 +14,13 @@ export function compareTs(left: string, right: string): number {
  * and process only messages after the last acknowledged timestamp.
  * Idempotent upserts make replay safe to repeat.
  */
-export class ReplayPlanner {
+export class ReplayPlanner<T extends { ts: string }> {
   constructor(
-    private readonly messages: ThreadMessage[],
+    private readonly messages: T[],
     private readonly lastAckTs: string,
   ) {}
 
-  replayMessages(): ThreadMessage[] {
+  replayMessages(): T[] {
     return this.messages
       .filter((message) => compareTs(message.ts, this.lastAckTs) > 0)
       .sort((a, b) => compareTs(a.ts, b.ts));
