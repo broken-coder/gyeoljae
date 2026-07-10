@@ -87,10 +87,12 @@ test("scoped approval reply classifies routine record-approval-only", () => {
   assert.equal(classified[0]!.action_class, "record-approval-only");
 });
 
-test("publicEnvelope strips internal source text", () => {
+test("publicEnvelope strips internal source text; redacted_text keeps clean content", () => {
   const envelope = new EnvelopeBuilder(billingThread()).build()[0]!;
   const sanitized = publicEnvelope(envelope);
 
   assert.ok(!("shadow_source_text" in sanitized));
-  assert.equal(JSON.stringify(sanitized).includes("billing-source request"), false);
+  // Clean text passes into redacted_text as-is (golden spec: only findings are tokenized).
+  assert.equal(sanitized.redacted_text, "EX-28 billing-source request");
+  assert.equal(sanitized.redaction_status, "clean");
 });

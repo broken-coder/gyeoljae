@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+
+import { Pipeline } from "./redaction/pipeline.js";
 import type { Envelope, IntakeKind, SlackFileRef, ThreadDocument, ThreadMessage } from "./types.js";
 
 const BILLING_KIND_PATTERN = /billing|invoice|receipt/i;
@@ -12,7 +15,14 @@ const SENSITIVE_TEXT_PATTERN = /billing|invoice|receipt|subscription|구독|결�
  * - Ambiguity degrades to sensitive_review=true, never to a lost record.
  */
 export class EnvelopeBuilder {
-  constructor(private readonly document: ThreadDocument) {}
+  private readonly pipeline: Pipeline;
+
+  constructor(
+    private readonly document: ThreadDocument,
+    options: { redactionPipeline?: Pipeline } = {},
+  ) {
+    this.pipeline = options.redactionPipeline ?? new Pipeline();
+  }
 
   build(): Envelope[] {
     return this.document.messages.map((message) => this.envelopeFor(message));
@@ -22,6 +32,8 @@ export class EnvelopeBuilder {
     const fileRefs = (message.files ?? []).map((file) => this.fileRef(file));
     const editedTs = message.edited?.ts ?? null;
     const text = message.text ?? "";
+    const dedupKey = `slack:${this.document.channel_id}:${this.document.thread_ts}:${message.ts}`;
+    const redaction = this.pipeline.syntheticRedact(text, redactionSourceId(dedupKey));
 
     return {
       source: "slack",
@@ -39,9 +51,12 @@ export class EnvelopeBuilder {
       text_excerpt: null,
       sensitive_review: this.sensitiveReview(text, fileRefs),
       classification_status: "unclassified",
-      dedup_key: `slack:${this.document.channel_id}:${this.document.thread_ts}:${message.ts}`,
+      dedup_key: dedupKey,
       recorded_at: new Date().toISOString(),
       recorded_by: "gyeoljae-shadow",
+      redaction_status: redaction.findings.length === 0 ? "clean" : "redacted",
+      redacted_text: redaction.redacted_text,
+      redaction_manifest: redaction.manifest,
       shadow_source_text: text,
     };
   }
@@ -65,6 +80,11 @@ export class EnvelopeBuilder {
     if (fileRefs.length > 0) return true;
     return SENSITIVE_TEXT_PATTERN.test(text);
   }
+}
+
+/** Matches the Ruby golden spec: "slack-" + first 12 hex chars of SHA256(dedup_key). */
+function redactionSourceId(dedupKey: string): string {
+  return `slack-${createHash("sha256").update(dedupKey).digest("hex").slice(0, 12)}`;
 }
 
 /** Strips internal-only fields; the result is safe to persist or emit. */
