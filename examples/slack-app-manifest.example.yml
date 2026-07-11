@@ -1,0 +1,39 @@
+# Slack app manifest for a dedicated gyeoljae bridge app.
+#
+# Create at https://api.slack.com/apps ("From a manifest"), review every
+# scope yourself, then generate:
+#   - an app-level token with connections:write (Socket Mode)  -> xapp-...
+#   - a bot token from the OAuth install                        -> xoxb-...
+# Store both as local files with tight permissions; gyeoljae reads them in
+# place and never logs them. A DEDICATED app (not shared with other bots)
+# avoids Socket Mode connections competing for events.
+display_information:
+  name: Gyeoljae Bridge
+  description: Human-in-the-loop approval bridge (ledger <-> chat)
+  background_color: "#2b2d31"
+features:
+  bot_user:
+    display_name: gyeoljae-bridge
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      # Inbound (read) — the bridge's core:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - users:read
+      # Outbound notifications — granted at install, UNUSED until your
+      # deployment's outbound approval step:
+      - chat:write
+settings:
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - message.channels
+      - message.groups
+  token_rotation_enabled: false

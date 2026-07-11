@@ -62,7 +62,7 @@ npm test
 - [x] Slack inbound poller (one-shot, cron/launchd friendly)
 - [x] Redaction pipeline port (redaction_status/manifest envelope fields)
 - [x] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
-- [ ] Slack Socket Mode listener for real-time approval replies
+- [x] Slack Socket Mode listener for real-time approval replies (live shadow rollout gated per deployment)
 - [x] GitHub Issues ledger adapter
 - [x] Docker packaging
 
