@@ -58,7 +58,7 @@ npm test
 - [x] Redaction pipeline port (redaction_status/manifest envelope fields)
 - [x] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
 - [ ] Slack Socket Mode listener for real-time approval replies
-- [ ] GitHub Issues ledger adapter
+- [x] GitHub Issues ledger adapter
 - [ ] Docker packaging
 
 ## License
