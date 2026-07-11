@@ -53,6 +53,7 @@ test("notifier delivers each event exactly once across runs", () =>
 
     assert.equal(first.length, 1);
     assert.equal(second.length, 0);
+    assert.equal(first[0]!.event.event_key, EVENT.event_key);
     assert.equal(chat.sent.length, 1);
   }));
 

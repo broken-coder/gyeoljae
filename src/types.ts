@@ -90,6 +90,10 @@ export interface LedgerAdapter {
 
 /** A chat surface: Slack today, others via adapters. */
 export interface ChatAdapter {
-  /** Post a non-sensitive notification (issue id/title/status/link only). */
-  notify(channel: string, body: string): Promise<void>;
+  /**
+   * Post a non-sensitive notification (issue id/title/status/link only).
+   * May return an adapter-specific receipt (e.g. posted message ts) that
+   * Notifier.deliver passes through to callers.
+   */
+  notify(channel: string, body: string): Promise<unknown>;
 }

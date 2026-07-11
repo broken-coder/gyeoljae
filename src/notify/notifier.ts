@@ -42,16 +42,16 @@ export class Notifier {
     private readonly statePath: string,
   ) {}
 
-  async deliver(events: LedgerEvent[]): Promise<LedgerEvent[]> {
+  async deliver(events: LedgerEvent[]): Promise<Array<{ event: LedgerEvent; receipt: unknown }>> {
     const seen = new Set(this.readState());
-    const delivered: LedgerEvent[] = [];
+    const delivered: Array<{ event: LedgerEvent; receipt: unknown }> = [];
 
     for (const event of events) {
       if (seen.has(event.event_key)) continue;
-      await this.chat.notify(this.channel, renderNotification(event));
+      const receipt = await this.chat.notify(this.channel, renderNotification(event));
       seen.add(event.event_key);
       this.writeState([...seen]); // persist after each send: a crash mid-batch must not re-send
-      delivered.push(event);
+      delivered.push({ event, receipt });
     }
     return delivered;
   }
