@@ -1,0 +1,30 @@
+# Example deployment: inbound poll on an interval, all writes local.
+#
+# Copy, rename, and edit. Never bake tokens into the image — mount the token
+# file read-only and point --token-file at the mount.
+services:
+  gyeoljae-poll:
+    build: ..
+    # One-shot per container run; pair with an external scheduler (cron,
+    # systemd timer) or a wrapper loop. A long-running listener mode ships
+    # with the Socket Mode milestone.
+    command:
+      - --channel-id
+      - C0EXAMPLE001
+      - --token-file
+      - /run/secrets/chat-token
+      - --ledger-ref
+      - example-org/example-repo#7
+      - --state-file
+      - /data/state.json
+      - --store
+      - /data/store.json
+      - --out
+      - /data/last-run.json
+    volumes:
+      - ./secrets/chat-token:/run/secrets/chat-token:ro
+      - gyeoljae-data:/data
+    restart: "no"
+
+volumes:
+  gyeoljae-data:

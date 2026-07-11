@@ -50,6 +50,11 @@ npm install
 npm test
 ```
 
+## Docs
+
+- [Getting started](docs/getting-started.md) — mental model, library usage, invariants
+- [Cookbook](docs/cookbook/README.md) — wiring AI agents into the approval loop, end-to-end deployment recipes
+
 ## Roadmap
 
 - [x] Core: envelope builder, classifier (ported, golden-spec tested)
@@ -59,7 +64,7 @@ npm test
 - [x] Outbound notifier (ledger → chat) with nudge endpoint for low-latency approval requests
 - [ ] Slack Socket Mode listener for real-time approval replies
 - [x] GitHub Issues ledger adapter
-- [ ] Docker packaging
+- [x] Docker packaging
 
 ## License
 
