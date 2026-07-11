@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -59,8 +59,11 @@ export async function runListen(argv: string[]): Promise<string> {
   if (values["app-token-file"]) {
     const pendingPath = values["pending-file"];
     if (!pendingPath) throw new Error("Live mode requires --pending-file");
-    const pendingList = JSON.parse(readFileSync(pendingPath, "utf8")) as PendingRequest[];
-    const pending = new Map(pendingList.map((request) => [request.thread_key, request]));
+    const loadPending = (): Map<string, PendingRequest> => {
+      if (!existsSync(pendingPath)) return new Map();
+      const pendingList = JSON.parse(readFileSync(pendingPath, "utf8")) as PendingRequest[];
+      return new Map(pendingList.map((request) => [request.thread_key, request]));
+    };
 
     const listener = new SocketModeListener({
       appToken: readTokenFile(values["app-token-file"], "xapp-"),
@@ -73,7 +76,8 @@ export async function runListen(argv: string[]): Promise<string> {
           ...(typeof event["user"] === "string" ? { user: event["user"] } : {}),
           ...(typeof event["text"] === "string" ? { text: event["text"] } : {}),
         };
-        const candidate = validateApprovalReply(reply, pending);
+        // Re-read per event: the watcher appends new request threads while we run.
+        const candidate = validateApprovalReply(reply, loadPending());
         if (candidate.verdict !== "not-approval") record(candidate);
       },
     });
