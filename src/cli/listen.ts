@@ -63,7 +63,7 @@ export async function runListen(argv: string[]): Promise<string> {
     const pending = new Map(pendingList.map((request) => [request.thread_key, request]));
 
     const listener = new SocketModeListener({
-      appToken: readTokenFile(values["app-token-file"]),
+      appToken: readTokenFile(values["app-token-file"], "xapp-"),
       onEvent: (event) => {
         if (event["type"] !== "message" || typeof event["ts"] !== "string") return;
         const reply: ApprovalReply = {

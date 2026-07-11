@@ -42,6 +42,11 @@ test("token file accepts raw and nested-JSON tokens", () => {
     writeFileSync(nested, JSON.stringify({ slack: { accounts: [{ botToken: "xoxb-fake" }] } }));
     assert.equal(readTokenFile(nested), "xoxb-fake");
 
+    const app = join(dir, "app");
+    writeFileSync(app, "xapp-1-test\n");
+    assert.equal(readTokenFile(app, "xapp-"), "xapp-1-test");
+    assert.throws(() => readTokenFile(app), /Unsupported token file format/);
+
     const bad = join(dir, "bad");
     writeFileSync(bad, "not-a-token");
     assert.throws(() => readTokenFile(bad), /Unsupported token file format/);
