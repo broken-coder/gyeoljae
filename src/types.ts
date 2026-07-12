@@ -69,8 +69,12 @@ export interface Envelope {
   recorded_by: string;
   /** "clean" when the scanner found nothing; "redacted" when tokens were substituted. */
   redaction_status: "clean" | "redacted";
-  /** Message text with each secret/PII finding replaced by an HMAC-derived token. */
-  redacted_text: string;
+  /**
+   * Internal only: message text with findings tokenized. Everything the
+   * scanner did NOT match survives verbatim, so this must never persist —
+   * publicEnvelope strips it alongside shadow_source_text.
+   */
+  redacted_text?: string;
   redaction_manifest: RedactionManifest;
   /** Internal only: source text for deterministic classification. Stripped before any persistence or output. */
   shadow_source_text?: string;

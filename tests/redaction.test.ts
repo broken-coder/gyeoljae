@@ -66,7 +66,7 @@ test("source id is validated", () => {
   assert.throws(() => pipeline().syntheticRedact("text", "../escape"), /source_id/);
 });
 
-test("envelope carries redaction fields; source text never in redacted output", () => {
+test("envelope carries redaction fields; source text never in redacted output", async () => {
   const document: ThreadDocument = {
     ledger_ref: "EX-1",
     channel_id: "C0EXAMPLE001",
@@ -76,10 +76,15 @@ test("envelope carries redaction fields; source text never in redacted output", 
   const [envelope] = new EnvelopeBuilder(document, { redactionPipeline: pipeline() }).build();
 
   assert.equal(envelope!.redaction_status, "redacted");
-  assert.ok(!envelope!.redacted_text.includes("synthetic.user@example.com"));
+  assert.ok(!envelope!.redacted_text!.includes("synthetic.user@example.com"));
   assert.match(envelope!.redaction_manifest.source_id, /^slack-[0-9a-f]{12}$/);
 
   const clean: ThreadDocument = { ...document, messages: [{ ts: "1700000060.000200", text: "hello" }] };
   const [cleanEnvelope] = new EnvelopeBuilder(clean, { redactionPipeline: pipeline() }).build();
   assert.equal(cleanEnvelope!.redaction_status, "clean");
+
+  const { publicEnvelope } = await import("../src/envelope.js");
+  const sanitized = publicEnvelope(envelope!);
+  assert.ok(!("redacted_text" in sanitized), "public path must strip redacted_text");
+  assert.ok(JSON.stringify(sanitized.redaction_manifest).includes("quarantine_ref"), "value-free manifest stays");
 });
