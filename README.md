@@ -32,7 +32,7 @@ Core rules, enforced in code:
 
 - `text_excerpt` is **always null** in shadow mode; file refs are metadata-only (id, name, mime, size, hash). Contents are never read.
 - Every envelope has an idempotent `dedup_key`; replays and retries create no duplicates.
-- Notification delivery is **deduplicated at-least-once**. Completed sends are checkpointed by event key; a crash after a remote send but before the local checkpoint can repeat a notification.
+- Notification delivery is **deduplicated at-least-once** by default (a crash after a remote send but before the checkpoint can repeat). Back the notifier with an `Outbox` for explicit pending → sending → sent state, stored receipts, and reconciliation of the post crash window.
 - Outage recovery is **replay from chat history** after the last acknowledged timestamp — no durable queue to babysit.
 - Message edits keep their identity: same `dedup_key`, recorded `edited_ts`, incremented `version`.
 - Notifications carry ledger refs and statuses, never content.

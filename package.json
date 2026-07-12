@@ -37,6 +37,14 @@
       "types": "./dist/src/notify/notifier.d.ts",
       "import": "./dist/src/notify/notifier.js"
     },
+    "./notify/outbox": {
+      "types": "./dist/src/notify/outbox.d.ts",
+      "import": "./dist/src/notify/outbox.js"
+    },
+    "./slack/inbox": {
+      "types": "./dist/src/slack/inbox.d.ts",
+      "import": "./dist/src/slack/inbox.js"
+    },
     "./notify/nudge": {
       "types": "./dist/src/notify/nudge.d.ts",
       "import": "./dist/src/notify/nudge.js"
