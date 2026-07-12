@@ -6,6 +6,8 @@
 
 > Status: early. Extracted from a private operating system where a Ruby shadow implementation has been running in production since day one. The Ruby test suite serves as the golden spec for this TypeScript port.
 
+> Release candidate: `v0.1.1-rc` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
+
 ## Why
 
 If you run autonomous agents against real infrastructure, you learn two things quickly:
@@ -13,7 +15,7 @@ If you run autonomous agents against real infrastructure, you learn two things q
 1. **Every intake must land in the ledger before anything acts on it.** An agent that crashes after reading a message loses the message; a bridge that records first degrades to "recorded but unprocessed."
 2. **Approvals belong in chat, but authority belongs in the ledger.** Humans live in Slack; the source of truth cannot.
 
-gyeoljae is the thin, deterministic piece between the two. It is deliberately **not** an agent: it never interprets content, never touches credentials, and anything ambiguous degrades to `needs-human` — never to silent progress.
+gyeoljae is the thin, deterministic piece between the two. It is deliberately **not** an agent: it never interprets content, credentials are isolated from agents and read only by the bridge process, and anything ambiguous degrades to `needs-human` — never to silent progress.
 
 ## Architecture
 
@@ -30,6 +32,7 @@ Core rules, enforced in code:
 
 - `text_excerpt` is **always null** in shadow mode; file refs are metadata-only (id, name, mime, size, hash). Contents are never read.
 - Every envelope has an idempotent `dedup_key`; replays and retries create no duplicates.
+- Notification delivery is **deduplicated at-least-once**. Completed sends are checkpointed by event key; a crash after a remote send but before the local checkpoint can repeat a notification.
 - Outage recovery is **replay from chat history** after the last acknowledged timestamp — no durable queue to babysit.
 - Message edits keep their identity: same `dedup_key`, recorded `edited_ts`, incremented `version`.
 - Notifications carry ledger refs and statuses, never content.
@@ -38,8 +41,8 @@ Core rules, enforced in code:
 
 | Kind | Built-in | Bring your own |
 | --- | --- | --- |
-| Chat | Slack (Socket Mode planned) | `ChatAdapter` interface; multi-channel fan-out via [Apprise](https://github.com/caronc/apprise) planned |
-| Ledger | GitHub Issues (planned) | `LedgerAdapter` interface |
+| Chat | Slack polling + Socket Mode listener (shipped; live writes deployment-gated) | `ChatAdapter` interface; multi-channel fan-out via [Apprise](https://github.com/caronc/apprise) planned |
+| Ledger | GitHub Issues (shipped) | `LedgerAdapter` interface |
 
 The original deployment uses a private ledger ([Paperclip](https://paperclip.ai)) through the same adapter interface.
 
@@ -48,12 +51,16 @@ The original deployment uses a private ledger ([Paperclip](https://paperclip.ai)
 ```bash
 npm install
 npm test
+npm run check:sanitize
+npm run smoke:package
 ```
 
 ## Docs
 
 - [Getting started](docs/getting-started.md) — mental model, library usage, invariants
 - [Cookbook](docs/cookbook/README.md) — wiring AI agents into the approval loop, end-to-end deployment recipes
+- [Token-file hardening](docs/security/token-files.md) — ownership, permissions, symlink checks, and rotation
+- [Local JSON state](docs/deployment/local-json-state.md) — required single-writer deployment contract
 
 ## Roadmap
 

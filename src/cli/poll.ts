@@ -12,6 +12,7 @@ import { readTokenFile } from "../slack/token.js";
 import { ThreadDocumentBuilder, groupThreads } from "../slack/thread-document.js";
 import { ShadowStore } from "../store.js";
 import type { ClassifiedEnvelope } from "../types.js";
+import { isInvokedDirectly } from "./main.js";
 
 /**
  * One-shot inbound poll: read a channel, emit sanitized envelopes, exit.
@@ -108,8 +109,7 @@ function writeState(
   writeFileSync(path, `${JSON.stringify({ last_ack_ts: newest ?? previousAck ?? null }, null, 2)}\n`);
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").at(-1) ?? "");
-if (invokedDirectly) {
+if (isInvokedDirectly(import.meta.url)) {
   runPoll(process.argv.slice(2))
     .then((summary) => console.log(summary))
     .catch((error: Error) => {

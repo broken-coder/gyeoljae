@@ -8,6 +8,7 @@ import { GitHubLedgerControl, GitHubRestApi, GitHubIssuesLedger, GitHubWatchSour
 import { FileChatAdapter } from "../notify/adapters.js";
 import { Notifier } from "../notify/notifier.js";
 import { WatchOrchestrator } from "../watch/orchestrator.js";
+import { isInvokedDirectly } from "./main.js";
 
 /**
  * One-shot watch pass over a GitHub Issues ledger.
@@ -68,8 +69,7 @@ export async function runWatch(argv: string[]): Promise<string> {
   return `watch pass: ${JSON.stringify(summary)} (${items.length} open items)`;
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").at(-1) ?? "");
-if (invokedDirectly) {
+if (isInvokedDirectly(import.meta.url)) {
   runWatch(process.argv.slice(2))
     .then((summary) => console.log(summary))
     .catch((error: Error) => {

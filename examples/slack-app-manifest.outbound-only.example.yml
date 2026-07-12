@@ -1,0 +1,25 @@
+# Least-privilege manifest for ledger -> Slack notifications only.
+#
+# This app cannot read channel history or receive Socket Mode events. Generate
+# only a bot token, store it in a hardened file, and grant the bridge access
+# after the deployment's outbound-write review.
+display_information:
+  name: Gyeoljae Notifications
+  description: Content-free approval status notifications
+  background_color: "#2b2d31"
+features:
+  bot_user:
+    display_name: gyeoljae-notify
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - chat:write
+settings:
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  # The static token-file reader does not implement Slack's OAuth refresh
+  # protocol. Follow docs/security/token-files.md for operator-led rotation.
+  token_rotation_enabled: false
