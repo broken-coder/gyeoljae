@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { threadKey, validateApprovalReply, type PendingRequest } from "../src/approval/validator.js";
 
-// Golden cases modeled on the HOM-56-style pilot evidence, with generic ids.
+// Golden cases modeled on the shadow-pilot evidence, with generic ids.
 const PENDING = new Map<string, PendingRequest>([
   [threadKey("C0EXAMPLE001", "1700000000.000100"), { thread_key: "C0EXAMPLE001:1700000000.000100", ledger_ref: "EX-56" }],
 ]);
