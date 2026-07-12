@@ -47,7 +47,9 @@ export async function runPoll(argv: string[]): Promise<string> {
   const lastAckTs = values["last-ack-ts"] ?? readState(values["state-file"]);
   const client = new SlackClient(readTokenFile(tokenFile));
 
-  let messages = await client.history(channelId, limit);
+  // With a known ack point, history reads the full window since it (cursor
+  // pagination); without one, a single newest page bounds the first run.
+  let messages = await client.history(channelId, limit, lastAckTs);
   if (lastAckTs) messages = new ReplayPlanner(messages, lastAckTs).replayMessages();
 
   const documents = [];

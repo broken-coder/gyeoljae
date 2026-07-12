@@ -4,14 +4,17 @@ import { dirname } from "node:path";
 import { publicEnvelope } from "./envelope.js";
 import type { Envelope } from "./types.js";
 
-type StoredEnvelope = Omit<Envelope, "shadow_source_text">;
+type StoredEnvelope = Omit<Envelope, "shadow_source_text" | "redacted_text">;
 
 /**
  * File-backed idempotent envelope store.
  *
  * Semantics ported from the Ruby golden spec:
  * - Upserts by dedup_key: retries and replays never create duplicates.
- * - Internal-only fields (shadow_source_text) are stripped before persisting.
+ * - Internal-only fields (shadow_source_text, redacted_text) are stripped
+ *   before persisting. Records written by older versions may still carry
+ *   them on disk, so reads sanitize every record and the next upsert
+ *   rewrites the whole file clean.
  * - An edit (changed edited_ts) increments version by exactly one over the
  *   stored record; re-upserting the same edit keeps the stored version.
  * - Records are kept sorted by message_ts (lexicographic, wire-compatible
@@ -22,7 +25,8 @@ export class ShadowStore {
 
   records(): StoredEnvelope[] {
     if (!existsSync(this.path)) return [];
-    return JSON.parse(readFileSync(this.path, "utf8")) as StoredEnvelope[];
+    const raw = JSON.parse(readFileSync(this.path, "utf8")) as Envelope[];
+    return raw.map((record) => publicEnvelope(record) as StoredEnvelope);
   }
 
   upsert(envelope: Envelope): void {

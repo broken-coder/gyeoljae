@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -64,7 +64,31 @@ test("upsert strips internal source text before persisting", () => {
     store.upsert(envelope!);
 
     assert.ok(store.records().every((record) => !("shadow_source_text" in record)));
+    assert.ok(store.records().every((record) => !("redacted_text" in record)));
   });
+});
+
+test("legacy records with message bodies are sanitized on read and rewritten clean", () => {
+  const dir = mkdtempSync(join(tmpdir(), "gyeoljae-"));
+  try {
+    const path = join(dir, "store.json");
+    const [fresh, legacySource] = new EnvelopeBuilder(thread()).build();
+    // Simulate a store written before redacted_text/shadow_source_text stripping.
+    const legacy = { ...legacySource!, redacted_text: "invoice body text", shadow_source_text: "invoice body text" };
+    writeFileSync(path, `${JSON.stringify([legacy], null, 2)}\n`);
+
+    const store = new ShadowStore(path);
+    assert.ok(store.records().every((record) => !("redacted_text" in record) && !("shadow_source_text" in record)));
+
+    store.upsert(fresh!);
+    const onDisk = readFileSync(path, "utf8");
+    assert.ok(!onDisk.includes("redacted_text"));
+    assert.ok(!onDisk.includes("shadow_source_text"));
+    assert.ok(!onDisk.includes("invoice body text"));
+    assert.equal(store.records().length, 2);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("edit increments version once; same edit is stable", () => {

@@ -8,6 +8,7 @@ import {
   GitHubIssuesWatcher,
   GitHubWatchSource,
   parseLedgerRef,
+  proposalDigest,
   renderIntakeComment,
   type GitHubApi,
 } from "../src/ledger/github.js";
@@ -176,4 +177,45 @@ test("open item scan paginates both issues and comments", async () => {
   assert.equal(items[0]!.comment_bodies.at(-1), "## Approval requested");
   assert.ok(api.calls.some((call) => call.path === `${issuesPath}&page=2`));
   assert.ok(api.calls.some((call) => call.path === `${commentsPath}&page=2`));
+});
+
+test("open items carry proposal identity from the latest request-marker comment", async () => {
+  const api = new FakeApi();
+  api.responses.set("GET /repos/example-org/example-repo/issues?state=open&per_page=100", [
+    {
+      number: 7,
+      title: "Proposal",
+      state: "open",
+      closed_at: null,
+      html_url: "https://github.com/example-org/example-repo/issues/7",
+      labels: [],
+    },
+    {
+      number: 8,
+      title: "No proposal yet",
+      state: "open",
+      closed_at: null,
+      html_url: "https://github.com/example-org/example-repo/issues/8",
+      labels: [],
+    },
+  ]);
+  api.responses.set("GET /repos/example-org/example-repo/issues/7/comments?per_page=100", [
+    { id: 100, body: "## Approval requested\n\nfirst proposal" },
+    { id: 101, body: "discussion — mentions '## Approval requested' but not at start" },
+    { id: 102, body: "## Approval requested\n\nsecond proposal" },
+  ]);
+  api.responses.set("GET /repos/example-org/example-repo/issues/8/comments?per_page=100", [
+    { id: 200, body: "just context" },
+  ]);
+
+  const [withProposal, withoutProposal] = await new GitHubWatchSource(api, "example-org", "example-repo").openItems();
+
+  // The LATEST marker comment is the current proposal cycle.
+  assert.equal(withProposal!.proposal_id, "102");
+  assert.equal(withProposal!.proposal_digest, proposalDigest("## Approval requested\n\nsecond proposal"));
+  // Digest changes when the proposal body is edited (record-time staleness check).
+  assert.notEqual(withProposal!.proposal_digest, proposalDigest("## Approval requested\n\nsecond proposal (edited)"));
+  // No marker comment -> no proposal identity -> orchestrator falls back to ref-only keys.
+  assert.equal(withoutProposal!.proposal_id, undefined);
+  assert.equal(withoutProposal!.proposal_digest, undefined);
 });

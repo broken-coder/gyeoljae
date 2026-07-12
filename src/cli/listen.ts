@@ -58,17 +58,29 @@ export async function runListen(argv: string[]): Promise<string> {
   if (values.fixture) {
     const fixture = JSON.parse(readFileSync(values.fixture, "utf8")) as {
       pending: PendingRequest[];
-      events: Array<{ channel: string; thread_ts?: string; ts: string; user?: string; text?: string }>;
+      events: Array<{
+        channel: string;
+        thread_ts?: string;
+        ts: string;
+        user?: string;
+        text?: string;
+        bot_id?: string;
+        subtype?: string;
+      }>;
     };
     const pending = new Map(fixture.pending.map((request) => [request.thread_key, request]));
     const counts: Record<string, number> = {};
     for (const event of fixture.events) {
+      // Same reply shape as the live path: bot_id/subtype must reach the
+      // validator so dry-runs replay bot/system events faithfully.
       const reply: ApprovalReply = {
         channel_id: event.channel,
         ts: event.ts,
         ...(event.thread_ts !== undefined ? { thread_ts: event.thread_ts } : {}),
         ...(event.user !== undefined ? { user: event.user } : {}),
         ...(event.text !== undefined ? { text: event.text } : {}),
+        ...(event.bot_id !== undefined ? { bot_id: event.bot_id } : {}),
+        ...(event.subtype !== undefined ? { subtype: event.subtype } : {}),
       };
       const candidate = validateApprovalReply(reply, pending, validateOptions);
       counts[candidate.verdict] = (counts[candidate.verdict] ?? 0) + 1;

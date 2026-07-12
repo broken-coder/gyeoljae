@@ -2,7 +2,7 @@
 
 A minimal end-to-end deployment using only public parts: GitHub Issues as the ledger, Slack as the chat surface, one bridge process on an interval.
 
-> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.1.1-rc`. The poller and listener can write only local files. The `gyeoljae-watch` CLI keeps chat output local but performs live GitHub ledger transitions when it finds workflow markers.
+> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.1.1-rc.1`. The poller and listener can write only local files. The `gyeoljae-watch` CLI keeps chat output local but performs live GitHub ledger transitions when it finds workflow markers.
 
 ## What you need
 
@@ -15,7 +15,7 @@ Keep tokens in [hardened files](../security/token-files.md); gyeoljae reads them
 Install the exact release candidate on the scheduled host and record each CLI's absolute path:
 
 ```bash
-npm install --global gyeoljae@0.1.1-rc
+npm install --global gyeoljae@0.1.1-rc.1
 command -v gyeoljae-poll
 ```
 
@@ -71,17 +71,31 @@ Point your agents at [the approval loop recipe](agent-approval-loop.md): they co
 
 ## 4. Approval replies
 
-The shipped `gyeoljae-listen` CLI receives Socket Mode replies and writes content-free approval candidates locally. Run `gyeoljae-watch --candidates <file>` only after reviewing the GitHub write credential and transition policy; the watch pass performs the live marker transitions above and records accepted candidates before agents resume. Shadow deployments can keep the operator-recorded path and the read-only library preview.
+The shipped `gyeoljae-listen` CLI receives Socket Mode replies and writes content-free approval candidates locally. Authorization is **fail-closed**: pass `--approvers-file`, a JSON array of chat user ids allowed to approve (keep it `0600`, one writer). Without it the listener still runs but **no reply ever becomes an approved-candidate** — well-formed approvals are recorded as `needs-human` (`authorization-not-configured`). Bot/system messages and subtypes (edits, broadcasts) are never validated; an approval from a non-allowlisted user is recorded as `needs-human` (`unauthorized-approver`), never accepted silently.
+
+```bash
+gyeoljae-listen \
+  --app-token-file /etc/gyeoljae/slack-app-token \
+  --pending-file /var/lib/gyeoljae/pending.json \
+  --approvers-file /etc/gyeoljae/approvers.json \
+  --inbox-dir /var/lib/gyeoljae/inbox \
+  --out /var/lib/gyeoljae/candidates.jsonl
+```
+
+`--inbox-dir` (recommended) stores each envelope durably before acking and replays unprocessed ones after a crash; without it, a reply that arrives in the instant between ack and write can be lost.
+
+Run `gyeoljae-watch --candidates <file>` only after reviewing the GitHub write credential and transition policy; the watch pass performs the live marker transitions above and records accepted candidates before agents resume. Shadow deployments can keep the operator-recorded path and the read-only library preview.
 
 ## GitHub pagination limits
 
-Each watch pass reads every open issue and every comment page. If GitHub rejects any page, including for rate limiting, the entire pass fails and the next scheduled pass starts from the beginning. Keep the operating ledger focused, monitor API quota, and avoid overlapping passes. Retry/backoff and bounded-page controls are not part of `v0.1.1-rc`.
+Each watch pass reads every open issue and every comment page. If GitHub rejects any page, including for rate limiting, the entire pass fails and the next scheduled pass starts from the beginning. Keep the operating ledger focused, monitor API quota, and avoid overlapping passes. Retry/backoff and bounded-page controls are not part of `v0.1.1-rc.1`.
 
 ## Safety checklist before going live
 
 - [ ] Bridge runs as its own user; token files are `0600` and mounted read-only in containers
 - [ ] Startup rejects token-file symlinks, unexpected owners, and group/world permissions
 - [ ] Scheduler or supervisor enforces one writer per local JSON path
+- [ ] Approver allowlist (`--approvers-file`) lists exactly the humans who may approve, and only operators can edit it
 - [ ] Intake channel and notification channel are **different** channels (loop prevention)
 - [ ] Shadow period completed: store shows no duplicates, state advances monotonically, outbox content is ref-only
 - [ ] Everyone agrees: chat replies are input, the ledger record is the authority
