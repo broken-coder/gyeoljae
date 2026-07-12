@@ -113,3 +113,36 @@ test("short-approval phrases are configurable (drop ambiguous defaults)", () => 
   assert.equal(dropped.verdict, "needs-human");
   assert.equal(dropped.reason, "modified-or-widened-reply");
 });
+
+// --- proposal binding: expiry + identity carry-through (HOM-72 item 2) ---
+
+const PENDING_WITH_PROPOSAL = new Map([
+  [
+    threadKey("C0EXAMPLE001", "1700000000.000100"),
+    {
+      thread_key: "C0EXAMPLE001:1700000000.000100",
+      ledger_ref: "EX-56",
+      proposal_id: "EX-56/p1",
+      proposal_digest: "abc123",
+      version: 2,
+      expires_at: 1700000200, // epoch seconds
+    },
+  ],
+]);
+
+test("approved candidate carries proposal identity for record-time re-check", () => {
+  const result = validateApprovalReply(reply("승인"), PENDING_WITH_PROPOSAL, AUTHZ);
+  assert.equal(result.verdict, "approved-candidate");
+  assert.equal(result.proposal_id, "EX-56/p1");
+  assert.equal(result.proposal_digest, "abc123");
+  assert.equal(result.version, 2);
+});
+
+test("a reply after the proposal expiry does not approve", () => {
+  // reply.ts = 1700000100 (< expiry) approves; a late reply does not.
+  const late = { ...reply("승인"), ts: "1700000300.000001" };
+  const result = validateApprovalReply(late, PENDING_WITH_PROPOSAL, AUTHZ);
+  assert.equal(result.verdict, "needs-human");
+  assert.equal(result.reason, "proposal-expired");
+  assert.equal(result.proposal_id, "EX-56/p1", "identity is preserved on the rejection for audit");
+});

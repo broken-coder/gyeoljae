@@ -75,7 +75,7 @@ test("request marker at comment start: blocked + notify + pending registration",
   const { control, pending, orchestrator } = rig();
   const summary = await orchestrator.pass([requestItem()]);
 
-  assert.deepEqual(summary, { blocked: 1, done: 0, approvals: 0, notified: 1 });
+  assert.deepEqual(summary, { blocked: 1, done: 0, approvals: 0, notified: 1, stale_rejected: 0 });
   assert.deepEqual(control.transitions, [{ ref: "EX-64", to: "blocked" }]);
   assert.equal(pending.length, 1);
   assert.equal(pending[0]!.ref, "EX-64");
@@ -92,7 +92,7 @@ test("regression: quoted marker mid-comment never triggers", async () => {
     }),
   ]);
 
-  assert.deepEqual(summary, { blocked: 0, done: 0, approvals: 0, notified: 0 });
+  assert.deepEqual(summary, { blocked: 0, done: 0, approvals: 0, notified: 0, stale_rejected: 0 });
   assert.deepEqual(control.transitions, []);
 });
 
@@ -103,7 +103,7 @@ test("done marker wins over request marker; closed items skipped", async () => {
     requestItem({ ref: "EX-1", status: "done", comment_bodies: ["## Approval requested\n..."] }),
   ]);
 
-  assert.deepEqual(summary, { blocked: 0, done: 1, approvals: 0, notified: 1 });
+  assert.deepEqual(summary, { blocked: 0, done: 1, approvals: 0, notified: 1, stale_rejected: 0 });
   assert.deepEqual(control.transitions, [{ ref: "EX-64", to: "done" }]);
 });
 
@@ -133,6 +133,49 @@ test("full idempotent rerun is all zeros", async () => {
   const first = await orchestrator.pass(items);
   const second = await orchestrator.pass([{ ...items[0]!, status: "done" }]);
 
-  assert.deepEqual(first, { blocked: 0, done: 1, approvals: 0, notified: 1 });
-  assert.deepEqual(second, { blocked: 0, done: 0, approvals: 0, notified: 0 });
+  assert.deepEqual(first, { blocked: 0, done: 1, approvals: 0, notified: 1, stale_rejected: 0 });
+  assert.deepEqual(second, { blocked: 0, done: 0, approvals: 0, notified: 0, stale_rejected: 0 });
+});
+
+test("record-time digest mismatch rejects a stale approval without recording", async () => {
+  const { control, orchestrator } = rig();
+  const candidate = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "EX-64",
+    reply_ts: "1700000700.000001",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+    proposal_digest: "digest-at-notification",
+  };
+  // Live item now carries a different proposal digest (proposal edited since notification).
+  const item = requestItem({ status: "blocked", proposal_digest: "digest-changed" });
+
+  const summary = await orchestrator.pass([item], [candidate]);
+  assert.equal(summary.stale_rejected, 1);
+  assert.equal(summary.approvals, 0);
+  assert.deepEqual(control.approvals, []);
+
+  // Consumed once: a rerun does not retry it.
+  const rerun = await orchestrator.pass([item], [candidate]);
+  assert.equal(rerun.stale_rejected, 0);
+});
+
+test("matching digest records normally; absent digests fall back to prior behavior", async () => {
+  const { control, orchestrator } = rig();
+  const matching = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "EX-64",
+    reply_ts: "1700000700.000003",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+    proposal_digest: "same-digest",
+  };
+  const summary = await orchestrator.pass(
+    [requestItem({ status: "blocked", proposal_digest: "same-digest" })],
+    [matching],
+  );
+  assert.equal(summary.approvals, 1);
+  assert.deepEqual(control.approvals, [{ ref: "EX-64", reply_ts: "1700000700.000003" }]);
 });
