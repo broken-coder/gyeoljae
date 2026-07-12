@@ -107,7 +107,7 @@ test("done marker wins over request marker; closed items skipped", async () => {
   assert.deepEqual(control.transitions, [{ ref: "EX-64", to: "done" }]);
 });
 
-test("approved candidate recorded exactly once, only for known refs", async () => {
+test("approved candidate is deduplicated and recorded only for known refs", async () => {
   const { control, orchestrator } = rig();
   const candidate: CandidateApproval = {
     verdict: "approved-candidate",

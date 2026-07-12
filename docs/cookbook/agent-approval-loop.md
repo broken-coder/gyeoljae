@@ -50,7 +50,7 @@ The bridge posts a content-free notification (`🔏 Approval needed: example-org
 
 ## Step 5-6 — recording, then resuming
 
-The approval is recorded back onto the ledger issue *before* anything executes (in shadow deployments, an operator does this; the Socket Mode milestone automates it). The agent resumes only from ledger state:
+The approval is recorded back onto the ledger issue *before* anything executes. In shadow deployments an operator does this; the shipped Socket Mode listener and watcher can perform the same flow after their write credentials and transition policy are enabled. The agent resumes only from ledger state:
 
 ```
 on wake:

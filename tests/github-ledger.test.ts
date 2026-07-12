@@ -6,6 +6,7 @@ import { EnvelopeBuilder, publicEnvelope } from "../src/envelope.js";
 import {
   GitHubIssuesLedger,
   GitHubIssuesWatcher,
+  GitHubWatchSource,
   parseLedgerRef,
   renderIntakeComment,
   type GitHubApi,
@@ -64,6 +65,21 @@ test("recordIntake posts a marked, content-free comment once", async () => {
   assert.equal(api.calls.filter((call) => call.method === "POST").length, postsBefore);
 });
 
+test("recordIntake finds an existing marker after the first 100 comments", async () => {
+  const api = new FakeApi();
+  const ledger = new GitHubIssuesLedger(api);
+  const first = envelope();
+  const path = "/repos/example-org/example-repo/issues/7/comments?per_page=100";
+
+  api.responses.set(`GET ${path}`, Array.from({ length: 100 }, () => ({ body: "unrelated" })));
+  api.responses.set(`GET ${path}&page=2`, [{ body: `<!-- gyeoljae:${first.dedup_key} -->` }]);
+
+  await ledger.recordIntake(first);
+
+  assert.ok(api.calls.some((call) => call.path === `${path}&page=2`));
+  assert.equal(api.calls.filter((call) => call.method === "POST").length, 0);
+});
+
 test("renderIntakeComment carries classification but no text", () => {
   const rendered = renderIntakeComment(envelope());
   assert.match(rendered, /Action class \| agent-required/);
@@ -93,4 +109,71 @@ test("watcher maps closed issues and approval labels to events, skips PRs", asyn
     ],
   );
   assert.equal(events[0]!.event_key, "example-org/example-repo#1:done:2026-01-02T00:00:00Z");
+});
+
+test("watcher includes issues after the first 100 results", async () => {
+  const api = new FakeApi();
+  const path = "/repos/example-org/example-repo/issues?state=all&since=2026-01-01T00%3A00%3A00Z&per_page=100";
+  api.responses.set(
+    `GET ${path}`,
+    Array.from({ length: 100 }, (_, index) => ({
+      number: index + 1,
+      title: `Plain ${index + 1}`,
+      state: "open",
+      closed_at: null,
+      html_url: `https://github.com/example-org/example-repo/issues/${index + 1}`,
+      labels: [],
+    })),
+  );
+  api.responses.set(`GET ${path}&page=2`, [{
+    number: 101,
+    title: "Needs review",
+    state: "open",
+    closed_at: null,
+    html_url: "https://github.com/example-org/example-repo/issues/101",
+    labels: [{ name: "approval-needed" }],
+  }]);
+
+  const events = await new GitHubIssuesWatcher(api, "example-org", "example-repo").events("2026-01-01T00:00:00Z");
+
+  assert.deepEqual(events.map((event) => event.ledger_ref), ["example-org/example-repo#101"]);
+  assert.ok(api.calls.some((call) => call.path === `${path}&page=2`));
+});
+
+test("open item scan paginates both issues and comments", async () => {
+  const api = new FakeApi();
+  const issuesPath = "/repos/example-org/example-repo/issues?state=open&per_page=100";
+  api.responses.set(
+    `GET ${issuesPath}`,
+    Array.from({ length: 100 }, (_, index) => ({
+      number: index + 1,
+      title: `Pull request ${index + 1}`,
+      state: "open",
+      closed_at: null,
+      html_url: `https://github.com/example-org/example-repo/pull/${index + 1}`,
+      labels: [],
+      pull_request: {},
+    })),
+  );
+  api.responses.set(`GET ${issuesPath}&page=2`, [{
+    number: 101,
+    title: "Approval request",
+    state: "open",
+    closed_at: null,
+    html_url: "https://github.com/example-org/example-repo/issues/101",
+    labels: [],
+  }]);
+
+  const commentsPath = "/repos/example-org/example-repo/issues/101/comments?per_page=100";
+  api.responses.set(`GET ${commentsPath}`, Array.from({ length: 100 }, () => ({ body: "context" })));
+  api.responses.set(`GET ${commentsPath}&page=2`, [{ body: "## Approval requested" }]);
+
+  const items = await new GitHubWatchSource(api, "example-org", "example-repo").openItems();
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0]!.ref, "example-org/example-repo#101");
+  assert.equal(items[0]!.comment_bodies.length, 101);
+  assert.equal(items[0]!.comment_bodies.at(-1), "## Approval requested");
+  assert.ok(api.calls.some((call) => call.path === `${issuesPath}&page=2`));
+  assert.ok(api.calls.some((call) => call.path === `${commentsPath}&page=2`));
 });

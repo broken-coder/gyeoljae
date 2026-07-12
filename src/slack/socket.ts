@@ -95,8 +95,9 @@ export class SocketModeListener {
       return; // non-JSON frames are ignored; the protocol is JSON-only
     }
 
-    // Ack first: Slack redelivers unacked envelopes, and our downstream is
-    // idempotent by dedup_key, so ack-then-process cannot lose events.
+    // Ack before the callback to meet Slack's response window. A process crash
+    // after this send but before callback persistence can lose the candidate;
+    // the current Socket Mode path has no automatic replay for acked envelopes.
     if (envelope.envelope_id) {
       socket.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
     }

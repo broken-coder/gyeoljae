@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { validateApprovalReply, type ApprovalReply, type PendingRequest } from "../approval/validator.js";
 import { SocketModeListener } from "../slack/socket.js";
 import { readTokenFile } from "../slack/token.js";
+import { isInvokedDirectly } from "./main.js";
 
 /**
  * Approval-reply listener.
@@ -88,8 +89,7 @@ export async function runListen(argv: string[]): Promise<string> {
   throw new Error("Provide --fixture (dry-run) or --app-token-file (live shadow).");
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").at(-1) ?? "");
-if (invokedDirectly) {
+if (isInvokedDirectly(import.meta.url)) {
   runListen(process.argv.slice(2))
     .then((summary) => console.log(summary))
     .catch((error: Error) => {

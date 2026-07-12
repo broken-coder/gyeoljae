@@ -33,7 +33,7 @@ test("slack adapter posts and returns the receipt through the notifier", async (
     assert.match(posts[0]!.text, /Approval needed: EX-64/);
 
     const rerun = await notifier.deliver([EVENT]);
-    assert.equal(rerun.length, 0, "receipts do not weaken exactly-once");
+    assert.equal(rerun.length, 0, "receipts preserve completed-run deduplication");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

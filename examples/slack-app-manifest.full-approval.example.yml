@@ -1,0 +1,33 @@
+# Broader manifest for the full approval loop: inbound history, Socket Mode
+# replies, and outbound notifications.
+#
+# Generate both an app-level token with connections:write and a bot token.
+# Store them as separate hardened files. Use a dedicated app so another Socket
+# Mode consumer cannot compete for events, and review the broader read/write
+# boundary before installation.
+display_information:
+  name: Gyeoljae Approval Bridge
+  description: Human-in-the-loop approval bridge (ledger <-> chat)
+  background_color: "#2b2d31"
+features:
+  bot_user:
+    display_name: gyeoljae-bridge
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - groups:history
+      - chat:write
+settings:
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - message.channels
+      - message.groups
+  # The static token-file reader does not implement Slack's OAuth refresh
+  # protocol. Follow docs/security/token-files.md for operator-led rotation.
+  token_rotation_enabled: false

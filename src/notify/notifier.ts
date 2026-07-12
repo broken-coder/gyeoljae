@@ -29,11 +29,12 @@ export function renderNotification(event: LedgerEvent): string {
 }
 
 /**
- * Routes ledger events to a chat adapter exactly once.
+ * Routes ledger events with deduplicated at-least-once delivery.
  *
  * Delivery state is a local JSON file of already-notified event keys, so
- * interval re-runs and nudge bursts never double-post. A failed send is not
- * marked notified and will retry on the next run.
+ * interval re-runs and nudge bursts skip checkpointed event keys. A failed
+ * send is not marked notified and retries on the next run; a crash after the
+ * remote send but before the checkpoint can repeat a notification.
  */
 export class Notifier {
   constructor(

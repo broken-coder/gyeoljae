@@ -1,6 +1,6 @@
 # Getting started
 
-> gyeoljae is early-stage. Today it ships the core library (envelope builder + classifier). The pollers, notifier, and adapters on the [roadmap](../README.md#roadmap) turn it into a runnable service.
+> gyeoljae is early-stage. `v0.1.1-rc` ships the core library, `poll`/`listen`/`watch` CLIs, notifier, Slack Socket Mode listener, and GitHub Issues adapter. The watch CLI uses a local chat outbox but performs live GitHub label/comment/close transitions when it sees workflow markers.
 
 ## The mental model in 60 seconds
 
@@ -10,7 +10,7 @@ You have **agents** doing work, a **ledger** that owns the truth about that work
 2. **Outbound**: the ledger says "this issue needs a human decision" → gyeoljae posts a notification to the messenger (refs and statuses only).
 3. **Approval loop**: a human replies "approve" in the thread → gyeoljae validates the reply belongs to the proposal thread and doesn't widen its scope → records the approval in the ledger → the waiting agent resumes.
 
-The bridge never interprets content, never touches credentials, and treats every ambiguity as `needs-human`.
+The bridge never interprets content. Credentials are isolated from agents and read only by the bridge process from [hardened token files](security/token-files.md). Every ambiguity becomes `needs-human`.
 
 ## Using the core library today
 
@@ -48,9 +48,9 @@ const safeToStore = classified.map(publicEnvelope);
 | Replay recovery | If the ledger is down, recovery is re-reading chat history after the last acknowledged timestamp — no durable queue to operate. |
 | Deterministic routing | Approval detection and classification are regex/metadata rules you can read in one screen. No model calls. |
 
-## Deployment shape (roadmap)
+## Deployment shape
 
-The intended production shape is a one-shot poller on an interval (cron or launchd — a template ships with the repo) during rollout, then an event-driven listener plus an outbound notifier with a local "nudge" endpoint so approval requests reach humans in seconds while polling remains the safety net.
+The shipped rollout shape is a one-shot poller on an interval (cron or launchd), a Socket Mode listener for approval replies, and a GitHub watcher with a local "nudge" endpoint. The poller and listener support local-file rollout. For read-only GitHub preview, compose `GitHubIssuesWatcher` with `FileChatAdapter`; do not use `gyeoljae-watch` as a dry-run because it wires live ledger control. Every local JSON path has a [single-writer requirement](deployment/local-json-state.md).
 
 ## FAQ
 

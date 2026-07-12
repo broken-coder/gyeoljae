@@ -13,6 +13,19 @@ export interface GitHubApi {
   request(method: string, path: string, body?: unknown): Promise<unknown>;
 }
 
+const PAGE_SIZE = 100;
+
+async function getAllPages<T>(api: GitHubApi, path: string): Promise<T[]> {
+  const results: T[] = [];
+  for (let page = 1; ; page += 1) {
+    const pagePath = page === 1 ? path : `${path}${path.includes("?") ? "&" : "?"}page=${page}`;
+    const response = await api.request("GET", pagePath);
+    if (!Array.isArray(response)) throw new Error(`GitHub API GET ${pagePath} did not return an array.`);
+    results.push(...(response as T[]));
+    if (response.length < PAGE_SIZE) return results;
+  }
+}
+
 export class GitHubRestApi implements GitHubApi {
   constructor(
     private readonly token: string,
@@ -83,10 +96,10 @@ export class GitHubIssuesLedger implements LedgerAdapter {
     const ref = parseLedgerRef(envelope.ledger_ref);
     const marker = intakeMarker(envelope.dedup_key);
 
-    const comments = (await this.api.request(
-      "GET",
+    const comments = await getAllPages<{ body?: string }>(
+      this.api,
       `/repos/${ref.owner}/${ref.repo}/issues/${ref.number}/comments?per_page=100`,
-    )) as Array<{ body?: string }>;
+    );
     if (comments.some((comment) => comment.body?.includes(marker))) return;
 
     await this.comment(envelope.ledger_ref, renderIntakeComment(envelope));
@@ -113,7 +126,7 @@ interface GitHubIssue {
  *
  * Event keys are stable per state, not per update: an issue labeled
  * approval-needed notifies once until the label cycle repeats; a close
- * notifies once per closed_at. Exactly-once delivery is the Notifier's job.
+ * notifies once per closed_at. Delivery is deduplicated at-least-once by the Notifier.
  */
 export class GitHubIssuesWatcher {
   constructor(
@@ -124,10 +137,10 @@ export class GitHubIssuesWatcher {
   ) {}
 
   async events(sinceIso: string): Promise<LedgerEvent[]> {
-    const issues = (await this.api.request(
-      "GET",
+    const issues = await getAllPages<GitHubIssue>(
+      this.api,
       `/repos/${this.owner}/${this.repo}/issues?state=all&since=${encodeURIComponent(sinceIso)}&per_page=100`,
-    )) as GitHubIssue[];
+    );
 
     const events: LedgerEvent[] = [];
     for (const issue of issues) {
@@ -171,18 +184,18 @@ export class GitHubWatchSource {
   ) {}
 
   async openItems(): Promise<WatchItem[]> {
-    const issues = (await this.api.request(
-      "GET",
+    const issues = await getAllPages<GitHubIssue>(
+      this.api,
       `/repos/${this.owner}/${this.repo}/issues?state=open&per_page=100`,
-    )) as GitHubIssue[];
+    );
 
     const items: WatchItem[] = [];
     for (const issue of issues) {
       if (issue.pull_request) continue;
-      const comments = (await this.api.request(
-        "GET",
+      const comments = await getAllPages<{ body?: string }>(
+        this.api,
         `/repos/${this.owner}/${this.repo}/issues/${issue.number}/comments?per_page=100`,
-      )) as Array<{ body?: string }>;
+      );
       items.push({
         ref: `${this.owner}/${this.repo}#${issue.number}`,
         title: issue.title,

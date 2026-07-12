@@ -43,7 +43,7 @@ test("notification rendering is content-free", () => {
   assert.equal(rendered, "🔏 Approval needed: EX-12 Rotate the example credential — https://ledger.example.com/EX-12");
 });
 
-test("notifier delivers each event exactly once across runs", () =>
+test("notifier skips checkpointed event keys across completed runs", () =>
   withDir(async (dir) => {
     const chat = new RecordingChat();
     const notifier = new Notifier(chat, "#example", join(dir, "notified.json"));

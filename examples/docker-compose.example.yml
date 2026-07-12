@@ -6,8 +6,8 @@ services:
   gyeoljae-poll:
     build: ..
     # One-shot per container run; pair with an external scheduler (cron,
-    # systemd timer) or a wrapper loop. A long-running listener mode ships
-    # with the Socket Mode milestone.
+    # systemd timer) or a wrapper loop. The shipped Socket Mode listener is a
+    # separate long-running process with its own app token and candidate file.
     command:
       - --channel-id
       - C0EXAMPLE001

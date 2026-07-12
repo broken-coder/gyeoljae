@@ -1,6 +1,6 @@
 {
   "name": "gyeoljae",
-  "version": "0.0.1",
+  "version": "0.1.1-rc",
   "description": "Human-in-the-loop approval bridge between your ops ledger and your messenger",
   "type": "module",
   "license": "MIT",
@@ -8,14 +8,70 @@
     "type": "git",
     "url": "git+https://github.com/broken-coder/gyeoljae.git"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./types": {
+      "types": "./dist/src/types.d.ts",
+      "import": "./dist/src/types.js"
+    },
+    "./envelope": {
+      "types": "./dist/src/envelope.d.ts",
+      "import": "./dist/src/envelope.js"
+    },
+    "./classifier": {
+      "types": "./dist/src/classifier.d.ts",
+      "import": "./dist/src/classifier.js"
+    },
+    "./ledger/github": {
+      "types": "./dist/src/ledger/github.d.ts",
+      "import": "./dist/src/ledger/github.js"
+    },
+    "./notify/adapters": {
+      "types": "./dist/src/notify/adapters.d.ts",
+      "import": "./dist/src/notify/adapters.js"
+    },
+    "./notify/notifier": {
+      "types": "./dist/src/notify/notifier.d.ts",
+      "import": "./dist/src/notify/notifier.js"
+    },
+    "./notify/nudge": {
+      "types": "./dist/src/notify/nudge.d.ts",
+      "import": "./dist/src/notify/nudge.js"
+    },
+    "./notify/slack": {
+      "types": "./dist/src/notify/slack.d.ts",
+      "import": "./dist/src/notify/slack.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "gyeoljae-poll": "./dist/src/cli/poll.js",
+    "gyeoljae-listen": "./dist/src/cli/listen.js",
+    "gyeoljae-watch": "./dist/src/cli/watch.js"
+  },
+  "files": [
+    "dist/src",
+    "docs",
+    "examples",
+    "LICENSE",
+    "README.md",
+    "README.ko.md",
+    "SECURITY.md"
+  ],
   "keywords": ["slack", "approval", "human-in-the-loop", "chatops", "agents", "bridge"],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc",
+    "clean": "node scripts/clean.mjs",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
-    "check:sanitize": "node scripts/sanitize-check.mjs"
+    "check:sanitize": "node scripts/sanitize-check.mjs",
+    "prepack": "npm run clean && npm run build",
+    "smoke:package": "node scripts/package-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

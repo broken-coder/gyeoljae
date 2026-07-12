@@ -8,12 +8,14 @@ import { GitHubLedgerControl, GitHubRestApi, GitHubIssuesLedger, GitHubWatchSour
 import { FileChatAdapter } from "../notify/adapters.js";
 import { Notifier } from "../notify/notifier.js";
 import { WatchOrchestrator } from "../watch/orchestrator.js";
+import { isInvokedDirectly } from "./main.js";
 
 /**
  * One-shot watch pass over a GitHub Issues ledger.
  *
- * Shadow by default: notifications land in a local outbox file. Wire a real
- * chat adapter only after your deployment's own outbound approval step.
+ * Chat-shadow, ledger-live: notifications land in a local outbox file, but
+ * marker-driven label/comment/close transitions write to GitHub immediately.
+ * Wire a real chat adapter only after the deployment's outbound approval step.
  */
 export async function runWatch(argv: string[]): Promise<string> {
   const { values } = parseArgs({
@@ -68,8 +70,7 @@ export async function runWatch(argv: string[]): Promise<string> {
   return `watch pass: ${JSON.stringify(summary)} (${items.length} open items)`;
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").at(-1) ?? "");
-if (invokedDirectly) {
+if (isInvokedDirectly(import.meta.url)) {
   runWatch(process.argv.slice(2))
     .then((summary) => console.log(summary))
     .catch((error: Error) => {

@@ -11,8 +11,8 @@ import type { LedgerEvent } from "../notify/notifier.js";
  *   approvals must never trigger — live-caught false positive).
  * - A done marker wins over a request marker on the same item.
  * - The orchestrator owns status transitions; agents only declare.
- * - Approved candidates are consumed exactly once.
- * - Notification exactly-once is the Notifier's job; receipts are handed to
+ * - Approved candidates are deduplicated by processed-state keys.
+ * - Notification delivery is deduplicated at-least-once by the Notifier; receipts are handed to
  *   the deployment so a notification's own thread can become the reply thread.
  */
 
