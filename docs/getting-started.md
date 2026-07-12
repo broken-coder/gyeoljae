@@ -8,7 +8,7 @@ You have **agents** doing work, a **ledger** that owns the truth about that work
 
 1. **Inbound**: a message or file lands in a channel → gyeoljae wraps it in a *sanitized envelope* (metadata only, never content) → records it in the ledger **before anything else happens** → classifies it: `routine`, `agent-required`, or `needs-human`.
 2. **Outbound**: the ledger says "this issue needs a human decision" → gyeoljae posts a notification to the messenger (refs and statuses only).
-3. **Approval loop**: a human replies "approve" in the thread → gyeoljae validates the reply belongs to the proposal thread and doesn't widen its scope → records the approval in the ledger → the waiting agent resumes.
+3. **Approval loop**: a human replies "approve" in the thread → gyeoljae validates the reply belongs to the proposal thread, doesn't widen its scope, and comes from an **authorized approver** (fail-closed: no configured allowlist ⇒ no auto-approval; bot/system and missing-user replies are rejected) → records the approval in the ledger → the waiting agent resumes.
 
 The bridge never interprets content. Credentials are isolated from agents and read only by the bridge process from [hardened token files](security/token-files.md). Every ambiguity becomes `needs-human`.
 

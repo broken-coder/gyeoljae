@@ -3,7 +3,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
-import { validateApprovalReply, type ApprovalReply, type PendingRequest } from "../approval/validator.js";
+import {
+  allowlistAuthorizer,
+  validateApprovalReply,
+  type ApprovalReply,
+  type Authorizer,
+  type PendingRequest,
+  type ValidateOptions,
+} from "../approval/validator.js";
 import { SocketModeListener } from "../slack/socket.js";
 import { readTokenFile } from "../slack/token.js";
 import { isInvokedDirectly } from "./main.js";
@@ -16,6 +23,9 @@ import { isInvokedDirectly } from "./main.js";
  *   "events": [{channel, thread_ts, ts, user, text}] }
  * --app-token-file: live Socket Mode (shadow deployments only) — candidates
  *   are appended to a LOCAL file; nothing is written to any ledger or chat.
+ * --approvers-file: JSON array of Slack user ids allowed to approve. Fail-closed:
+ *   without it, replies never become approved-candidates (they degrade to
+ *   needs-human). Bot/system messages and missing-user replies are always rejected.
  */
 export async function runListen(argv: string[]): Promise<string> {
   const { values } = parseArgs({
@@ -24,12 +34,20 @@ export async function runListen(argv: string[]): Promise<string> {
       fixture: { type: "string" },
       "app-token-file": { type: "string" },
       "pending-file": { type: "string" },
+      "approvers-file": { type: "string" },
       out: { type: "string" },
     },
   });
   const outPath = values.out;
   if (!outPath) throw new Error("Missing required option: --out");
   mkdirSync(dirname(outPath), { recursive: true });
+
+  // Fail-closed: without an approvers file, no reply can become an
+  // approved-candidate (they degrade to needs-human).
+  const authorizer: Authorizer | undefined = values["approvers-file"]
+    ? allowlistAuthorizer(JSON.parse(readFileSync(values["approvers-file"], "utf8")) as string[])
+    : undefined;
+  const validateOptions: ValidateOptions = authorizer ? { authorizer } : {};
 
   const record = (candidate: unknown): void => {
     appendFileSync(outPath, `${JSON.stringify(candidate)}\n`);
@@ -50,7 +68,7 @@ export async function runListen(argv: string[]): Promise<string> {
         ...(event.user !== undefined ? { user: event.user } : {}),
         ...(event.text !== undefined ? { text: event.text } : {}),
       };
-      const candidate = validateApprovalReply(reply, pending);
+      const candidate = validateApprovalReply(reply, pending, validateOptions);
       counts[candidate.verdict] = (counts[candidate.verdict] ?? 0) + 1;
       if (candidate.verdict !== "not-approval") record(candidate);
     }
@@ -76,9 +94,11 @@ export async function runListen(argv: string[]): Promise<string> {
           ...(typeof event["thread_ts"] === "string" ? { thread_ts: event["thread_ts"] } : {}),
           ...(typeof event["user"] === "string" ? { user: event["user"] } : {}),
           ...(typeof event["text"] === "string" ? { text: event["text"] } : {}),
+          ...(typeof event["bot_id"] === "string" ? { bot_id: event["bot_id"] } : {}),
+          ...(typeof event["subtype"] === "string" ? { subtype: event["subtype"] } : {}),
         };
         // Re-read per event: the watcher appends new request threads while we run.
-        const candidate = validateApprovalReply(reply, loadPending());
+        const candidate = validateApprovalReply(reply, loadPending(), validateOptions);
         if (candidate.verdict !== "not-approval") record(candidate);
       },
     });

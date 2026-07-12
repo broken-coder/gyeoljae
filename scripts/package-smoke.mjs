@@ -73,7 +73,9 @@ try {
   );
 
   const fixture = join(installDir, "fixture.json");
+  const approvers = join(installDir, "approvers.json");
   const output = join(installDir, "candidates.jsonl");
+  writeFileSync(approvers, `${JSON.stringify(["U0EXAMPLE001"])}\n`);
   writeFileSync(
     fixture,
     `${JSON.stringify({
@@ -89,7 +91,7 @@ try {
   );
   const listenResult = spawnSync(
     installedBin("gyeoljae-listen"),
-    ["--fixture", fixture, "--out", output],
+    ["--fixture", fixture, "--approvers-file", approvers, "--out", output],
     installedBinOptions(),
   );
   if (
