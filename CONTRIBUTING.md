@@ -39,6 +39,10 @@ Implement `LedgerAdapter` or `ChatAdapter` from `src/types.ts`. Requirements:
 - Notifications must carry refs and statuses only — never message content.
 - Include a test using generic fixtures.
 
+## Release candidates
+
+Prerelease versions must not replace npm's `latest` tag. After a separate publish approval, release an RC with `npm publish --tag next`; preparing or reviewing a PR never authorizes that command.
+
 ## Reporting issues
 
 Use the issue templates. For anything security-sensitive, see [SECURITY.md](SECURITY.md) — do not open a public issue.

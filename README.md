@@ -55,6 +55,8 @@ npm run check:sanitize
 npm run smoke:package
 ```
 
+The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `v0.1.1-rc` package contract.
+
 ## Docs
 
 - [Getting started](docs/getting-started.md) — mental model, library usage, invariants

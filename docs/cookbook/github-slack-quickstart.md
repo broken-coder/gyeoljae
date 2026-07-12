@@ -2,7 +2,7 @@
 
 A minimal end-to-end deployment using only public parts: GitHub Issues as the ledger, Slack as the chat surface, one bridge process on an interval.
 
-> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.1.1-rc`. Live ledger/chat writes remain opt-in deployment capabilities; start with local-file outputs.
+> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.1.1-rc`. The poller and listener can write only local files. The `gyeoljae-watch` CLI keeps chat output local but performs live GitHub ledger transitions when it finds workflow markers.
 
 ## What you need
 
@@ -12,12 +12,19 @@ A minimal end-to-end deployment using only public parts: GitHub Issues as the le
 
 Keep tokens in [hardened files](../security/token-files.md); gyeoljae reads them in place and never logs them. Keep each local checkpoint under the [single-writer contract](../deployment/local-json-state.md).
 
+Install the exact release candidate on the scheduled host and record each CLI's absolute path:
+
+```bash
+npm install --global gyeoljae@0.1.1-rc
+command -v gyeoljae-poll
+```
+
 ## 1. Inbound: channel → sanitized envelopes
 
 Run on an interval (cron shown; launchd/systemd/compose all work — see `examples/docker-compose.example.yml`):
 
 ```cron
-*/10 * * * * gyeoljae-poll \
+*/10 * * * * /usr/local/bin/gyeoljae-poll \
   --channel-id C0EXAMPLE001 \
   --token-file /etc/gyeoljae/slack-token \
   --ledger-ref example-org/ops-ledger#1 \
@@ -26,24 +33,28 @@ Run on an interval (cron shown; launchd/systemd/compose all work — see `exampl
   --out /var/lib/gyeoljae/last-run.json
 ```
 
+Replace `/usr/local/bin/gyeoljae-poll` with the path returned by `command -v`; cron does not reliably inherit an interactive npm `PATH`.
+
 What you get per run: sanitized envelopes (no message content, metadata-only file refs) upserted by `dedup_key`, classified `routine` / `agent-required` / `needs-human`, with the last acknowledged timestamp available for replay after an outage.
 
 **Recommended rollout:** run this in shadow (local files only) for a week before wiring any ledger writes. Boring logs are the pass criterion.
 
 ## 2. Outbound: ledger → Slack
 
-The packaged `gyeoljae-watch` CLI scans GitHub and writes a shadow outbox. The same shipped watcher/notifier APIs can be composed directly when a deployment is ready to add a reviewed Slack write capability:
+For a read-only GitHub preview, compose `GitHubIssuesWatcher` with `FileChatAdapter`. This path reads issue state and writes only a local outbox until the deployment replaces the chat adapter:
 
 ```ts
+import { readFileSync } from "node:fs";
 import { GitHubRestApi, GitHubIssuesWatcher } from "gyeoljae/ledger/github";
 import { Notifier } from "gyeoljae/notify/notifier";
 import { FileChatAdapter } from "gyeoljae/notify/adapters";
 
-const api = new GitHubRestApi(process.env.GITHUB_TOKEN!);
+const api = new GitHubRestApi(readFileSync("/etc/gyeoljae/github-token", "utf8").trim());
 const watcher = new GitHubIssuesWatcher(api, "example-org", "ops-ledger");
 // Shadow first: FileChatAdapter writes an outbox file instead of posting.
 const notifier = new Notifier(new FileChatAdapter("/var/lib/gyeoljae/outbox.jsonl"), "#approvals", "/var/lib/gyeoljae/notified.json");
 
+const sinceIso = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 const events = await watcher.events(sinceIso);
 await notifier.deliver(events);
 ```
@@ -52,13 +63,19 @@ Label an issue `approval-needed` → an approval notification. Close it → a `d
 
 When the shadow outbox looks right for a few days, swap `FileChatAdapter` for a real Slack `chat.postMessage` adapter — that's the moment your bridge gains its single write credential, so treat it as a reviewed change.
 
+> **`gyeoljae-watch` is not a ledger dry-run.** It always wires `GitHubLedgerControl`: an issue whose comment starts with `## Approval requested` receives a live `blocked` label and comment, while `## 완료` closes the issue and adds a comment. Its `FileChatAdapter` shadows only the chat side. Use a dedicated test repository before enabling this CLI on an operating ledger.
+
 ## 3. Agents
 
 Point your agents at [the approval loop recipe](agent-approval-loop.md): they comment proposals onto issues in `example-org/ops-ledger`, add the `approval-needed` label, optionally `POST /nudge`, and resume from recorded approvals.
 
 ## 4. Approval replies
 
-The shipped `gyeoljae-listen` CLI receives Socket Mode replies and writes content-free approval candidates locally. Run `gyeoljae-watch --candidates <file>` only after reviewing the GitHub write credential and transition policy; it validates the same thread-scoped rules and records accepted candidates before agents resume. Shadow deployments can keep the operator-recorded path.
+The shipped `gyeoljae-listen` CLI receives Socket Mode replies and writes content-free approval candidates locally. Run `gyeoljae-watch --candidates <file>` only after reviewing the GitHub write credential and transition policy; the watch pass performs the live marker transitions above and records accepted candidates before agents resume. Shadow deployments can keep the operator-recorded path and the read-only library preview.
+
+## GitHub pagination limits
+
+Each watch pass reads every open issue and every comment page. If GitHub rejects any page, including for rate limiting, the entire pass fails and the next scheduled pass starts from the beginning. Keep the operating ledger focused, monitor API quota, and avoid overlapping passes. Retry/backoff and bounded-page controls are not part of `v0.1.1-rc`.
 
 ## Safety checklist before going live
 

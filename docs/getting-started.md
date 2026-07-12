@@ -1,6 +1,6 @@
 # Getting started
 
-> gyeoljae is early-stage. `v0.1.1-rc` ships the core library, `poll`/`listen`/`watch` CLIs, notifier, Slack Socket Mode listener, and GitHub Issues adapter. Live ledger and chat writes remain gated by each deployment's own approval and credential boundary.
+> gyeoljae is early-stage. `v0.1.1-rc` ships the core library, `poll`/`listen`/`watch` CLIs, notifier, Slack Socket Mode listener, and GitHub Issues adapter. The watch CLI uses a local chat outbox but performs live GitHub label/comment/close transitions when it sees workflow markers.
 
 ## The mental model in 60 seconds
 
@@ -50,7 +50,7 @@ const safeToStore = classified.map(publicEnvelope);
 
 ## Deployment shape
 
-The shipped rollout shape is a one-shot poller on an interval (cron or launchd), a Socket Mode listener for approval replies, and a GitHub watcher with a local "nudge" endpoint. Start with local-file outputs, then enable ledger or chat writes only after reviewing that deployment's credential boundary. Every local JSON path has a [single-writer requirement](deployment/local-json-state.md).
+The shipped rollout shape is a one-shot poller on an interval (cron or launchd), a Socket Mode listener for approval replies, and a GitHub watcher with a local "nudge" endpoint. The poller and listener support local-file rollout. For read-only GitHub preview, compose `GitHubIssuesWatcher` with `FileChatAdapter`; do not use `gyeoljae-watch` as a dry-run because it wires live ledger control. Every local JSON path has a [single-writer requirement](deployment/local-json-state.md).
 
 ## FAQ
 

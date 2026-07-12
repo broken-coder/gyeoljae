@@ -44,6 +44,8 @@ npm run check:sanitize
 npm run smoke:package
 ```
 
+패키지는 ESM 전용입니다. `import`를 사용하며 CommonJS `require()`는 `v0.1.1-rc` 계약에 포함하지 않습니다.
+
 사용 예시와 상세 설명은 [docs/getting-started.md](docs/getting-started.md)를 보세요.
 
 ## 기여
