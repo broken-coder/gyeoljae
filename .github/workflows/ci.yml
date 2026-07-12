@@ -24,3 +24,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t gyeoljae:ci .
+      # Runtime smoke: the packaged listener validates a fixture end-to-end
+      # inside the runtime image (no network, no tokens), covering the
+      # eligibility gate and the fail-closed approver allowlist.
+      - name: docker runtime smoke
+        run: |
+          docker run --rm \
+            -v "$PWD/tests/fixtures:/fixtures:ro" \
+            --entrypoint sh gyeoljae:ci -ec '
+              node dist/src/cli/listen.js \
+                --fixture /fixtures/docker-smoke-fixture.json \
+                --approvers-file /fixtures/docker-smoke-approvers.json \
+                --out /tmp/candidates.jsonl
+              grep -q "\"verdict\":\"approved-candidate\"" /tmp/candidates.jsonl
+              grep -q "\"reason\":\"unauthorized-approver\"" /tmp/candidates.jsonl
+              test "$(wc -l < /tmp/candidates.jsonl)" -eq 2
+            '

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { LedgerEvent } from "../notify/notifier.js";
 import type { ClassifiedEnvelope, LedgerAdapter } from "../types.js";
 
@@ -181,6 +183,7 @@ export class GitHubWatchSource {
     private readonly owner: string,
     private readonly repo: string,
     private readonly blockedLabel = "blocked",
+    private readonly requestMarker = "## Approval requested",
   ) {}
 
   async openItems(): Promise<WatchItem[]> {
@@ -192,20 +195,32 @@ export class GitHubWatchSource {
     const items: WatchItem[] = [];
     for (const issue of issues) {
       if (issue.pull_request) continue;
-      const comments = await getAllPages<{ body?: string }>(
+      const comments = await getAllPages<{ id?: number; body?: string }>(
         this.api,
         `/repos/${this.owner}/${this.repo}/issues/${issue.number}/comments?per_page=100`,
       );
+      // The latest request-marker comment is the current proposal: its id keys
+      // the approval cycle, its body digest is re-checked at record time.
+      const proposal = comments
+        .filter((comment) => (comment.body ?? "").trimStart().startsWith(this.requestMarker))
+        .at(-1);
       items.push({
         ref: `${this.owner}/${this.repo}#${issue.number}`,
         title: issue.title,
         status: issue.labels.some((label) => label.name === this.blockedLabel) ? "blocked" : "open",
         comment_bodies: comments.map((comment) => comment.body ?? ""),
+        ...(proposal?.id !== undefined ? { proposal_id: String(proposal.id) } : {}),
+        ...(proposal !== undefined ? { proposal_digest: proposalDigest(proposal.body ?? "") } : {}),
         url: issue.html_url,
       });
     }
     return items;
   }
+}
+
+/** Content digest of a proposal comment body — compared, never displayed. */
+export function proposalDigest(body: string): string {
+  return createHash("sha256").update(body).digest("hex").slice(0, 16);
 }
 
 export class GitHubLedgerControl implements LedgerControl {

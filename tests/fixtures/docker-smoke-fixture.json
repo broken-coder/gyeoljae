@@ -1,0 +1,27 @@
+{
+  "pending": [{ "thread_key": "C0EXAMPLE001:1700000000.000100", "ledger_ref": "EX-1" }],
+  "events": [
+    {
+      "channel": "C0EXAMPLE001",
+      "thread_ts": "1700000000.000100",
+      "ts": "1700000001.000100",
+      "user": "U0EXAMPLE001",
+      "text": "approve"
+    },
+    {
+      "channel": "C0EXAMPLE001",
+      "thread_ts": "1700000000.000100",
+      "ts": "1700000002.000100",
+      "user": "U0EXAMPLE002",
+      "text": "approve"
+    },
+    {
+      "channel": "C0EXAMPLE001",
+      "thread_ts": "1700000000.000100",
+      "ts": "1700000003.000100",
+      "user": "U0EXAMPLE001",
+      "text": "approve",
+      "bot_id": "B0EXAMPLE001"
+    }
+  ]
+}

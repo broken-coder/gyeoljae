@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = process.cwd();
+const rootVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const scratch = mkdtempSync(join(tmpdir(), "gyeoljae-package-smoke-"));
 const packDir = join(scratch, "pack");
@@ -66,7 +67,7 @@ try {
         'await import("gyeoljae/types");',
         'const packageMetadata = await import("gyeoljae/package.json", { with: { type: "json" } });',
         "if (![EnvelopeBuilder, publicEnvelope, Classifier, GitHubRestApi, Notifier, FileChatAdapter, NudgeServer, SlackChatAdapter].every(Boolean)) process.exit(1);",
-        'if (packageMetadata.default.version !== "0.1.1-rc") process.exit(1);',
+        `if (packageMetadata.default.version !== ${JSON.stringify(rootVersion)}) process.exit(1);`,
       ].join("\n"),
     ],
     { cwd: installDir, stdio: "pipe" },
@@ -80,13 +81,22 @@ try {
     fixture,
     `${JSON.stringify({
       pending: [{ thread_key: "C0EXAMPLE001:1700000000.000100", ledger_ref: "EX-1" }],
-      events: [{
-        channel: "C0EXAMPLE001",
-        thread_ts: "1700000000.000100",
-        ts: "1700000001.000100",
-        user: "U0EXAMPLE001",
-        text: "approve",
-      }],
+      events: [
+        {
+          channel: "C0EXAMPLE001",
+          thread_ts: "1700000000.000100",
+          ts: "1700000001.000100",
+          user: "U0EXAMPLE001",
+          text: "approve",
+        },
+        {
+          channel: "C0EXAMPLE001",
+          thread_ts: "1700000000.000100",
+          ts: "1700000002.000100",
+          user: "U0EXAMPLE002",
+          text: "approve",
+        },
+      ],
     }, null, 2)}\n`,
   );
   const listenResult = spawnSync(
@@ -94,12 +104,13 @@ try {
     ["--fixture", fixture, "--approvers-file", approvers, "--out", output],
     installedBinOptions(),
   );
+  const candidateLines = existsSync(output) ? readFileSync(output, "utf8") : "";
   if (
     listenResult.status !== 0 ||
-    !existsSync(output) ||
-    !readFileSync(output, "utf8").includes('"verdict":"approved-candidate"')
+    !candidateLines.includes('"verdict":"approved-candidate"') ||
+    !candidateLines.includes('"reason":"unauthorized-approver"')
   ) {
-    throw new Error("Installed CLI did not produce the expected approval candidate.");
+    throw new Error("Installed CLI did not produce the expected authorized approval candidate.");
   }
 
   expectCliFailure("gyeoljae-poll", "Missing required option: --channel-id");
