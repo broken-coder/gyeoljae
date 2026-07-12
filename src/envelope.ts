@@ -88,7 +88,9 @@ function redactionSourceId(dedupKey: string): string {
 }
 
 /** Strips internal-only fields; the result is safe to persist or emit. */
-export function publicEnvelope<T extends Envelope>(envelope: T): Omit<T, "shadow_source_text"> {
-  const { shadow_source_text: _internal, ...rest } = envelope;
+export function publicEnvelope<T extends Envelope>(
+  envelope: T,
+): Omit<T, "shadow_source_text" | "redacted_text"> {
+  const { shadow_source_text: _text, redacted_text: _redacted, ...rest } = envelope;
   return rest;
 }

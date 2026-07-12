@@ -92,7 +92,6 @@ test("publicEnvelope strips internal source text; redacted_text keeps clean cont
   const sanitized = publicEnvelope(envelope);
 
   assert.ok(!("shadow_source_text" in sanitized));
-  // Clean text passes into redacted_text as-is (golden spec: only findings are tokenized).
-  assert.equal(sanitized.redacted_text, "EX-28 billing-source request");
+  assert.ok(!("redacted_text" in sanitized), "redacted_text must never persist or emit");
   assert.equal(sanitized.redaction_status, "clean");
 });
