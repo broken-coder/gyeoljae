@@ -43,6 +43,13 @@ export async function defaultOpenUrl(appToken: string): Promise<string> {
 export interface ListenerOptions {
   appToken: string;
   onEvent: (event: Record<string, unknown>) => void | Promise<void>;
+  /**
+   * Durably record the envelope BEFORE it is acked. Store-then-ack removes the
+   * loss window: if it resolves, the envelope survives a crash and is replayed;
+   * if it throws, the envelope is NOT acked and Slack redelivers. Omit for the
+   * best-effort (ack-first) path.
+   */
+  persistBeforeAck?: (envelope: SocketEnvelope) => Promise<void>;
   openUrl?: OpenUrl;
   socketFactory?: SocketFactory;
   /** Delay before reconnect attempts; kept small in tests. */
@@ -95,9 +102,17 @@ export class SocketModeListener {
       return; // non-JSON frames are ignored; the protocol is JSON-only
     }
 
-    // Ack before the callback to meet Slack's response window. A process crash
-    // after this send but before callback persistence can lose the candidate;
-    // the current Socket Mode path has no automatic replay for acked envelopes.
+    // Store-then-ack: persist durably before acking so an acked envelope is
+    // never lost. If persistence throws, skip the ack — Slack will redeliver.
+    if (this.options.persistBeforeAck) {
+      try {
+        await this.options.persistBeforeAck(envelope);
+      } catch {
+        return; // not acked → redelivery
+      }
+    }
+
+    // Ack within Slack's response window (after durable persistence, if any).
     if (envelope.envelope_id) {
       socket.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
     }

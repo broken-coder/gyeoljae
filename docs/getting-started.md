@@ -50,7 +50,7 @@ const safeToStore = classified.map(publicEnvelope);
 
 ## Deployment shape
 
-The shipped rollout shape is a one-shot poller on an interval (cron or launchd), a Socket Mode listener for approval replies, and a GitHub watcher with a local "nudge" endpoint. The poller and listener support local-file rollout. For read-only GitHub preview, compose `GitHubIssuesWatcher` with `FileChatAdapter`; do not use `gyeoljae-watch` as a dry-run because it wires live ledger control. Every local JSON path has a [single-writer requirement](deployment/local-json-state.md).
+The shipped rollout shape is a one-shot poller on an interval (cron or launchd), a Socket Mode listener for approval replies, and a GitHub watcher with a local "nudge" endpoint. The Socket Mode listener is at-least-once: run it with `--inbox-dir` for a store-then-ack durable inbox (acked envelopes survive a crash and replay on restart), or pair it with a history-reconciliation poller. Without one of the two, an ack-then-crash can drop a reply. The poller and listener support local-file rollout. For read-only GitHub preview, compose `GitHubIssuesWatcher` with `FileChatAdapter`; do not use `gyeoljae-watch` as a dry-run because it wires live ledger control. Every local JSON path has a [single-writer requirement](deployment/local-json-state.md).
 
 ## FAQ
 
