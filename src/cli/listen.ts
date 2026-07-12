@@ -11,6 +11,7 @@ import {
   type PendingRequest,
   type ValidateOptions,
 } from "../approval/validator.js";
+import { DurableInbox } from "../slack/inbox.js";
 import { SocketModeListener } from "../slack/socket.js";
 import { readTokenFile } from "../slack/token.js";
 import { isInvokedDirectly } from "./main.js";
@@ -35,6 +36,7 @@ export async function runListen(argv: string[]): Promise<string> {
       "app-token-file": { type: "string" },
       "pending-file": { type: "string" },
       "approvers-file": { type: "string" },
+      "inbox-dir": { type: "string" },
       out: { type: "string" },
     },
   });
@@ -84,26 +86,57 @@ export async function runListen(argv: string[]): Promise<string> {
       return new Map(pendingList.map((request) => [request.thread_key, request]));
     };
 
+    // Optional durable inbox: store-then-ack + replay so no acked reply is lost.
+    const inbox = values["inbox-dir"] ? new DurableInbox(values["inbox-dir"]) : undefined;
+
+    const processEvent = (event: Record<string, unknown>): void => {
+      if (event["type"] !== "message" || typeof event["ts"] !== "string") return;
+      const reply: ApprovalReply = {
+        channel_id: String(event["channel"] ?? ""),
+        ts: String(event["ts"]),
+        ...(typeof event["thread_ts"] === "string" ? { thread_ts: event["thread_ts"] } : {}),
+        ...(typeof event["user"] === "string" ? { user: event["user"] } : {}),
+        ...(typeof event["text"] === "string" ? { text: event["text"] } : {}),
+        ...(typeof event["bot_id"] === "string" ? { bot_id: event["bot_id"] } : {}),
+        ...(typeof event["subtype"] === "string" ? { subtype: event["subtype"] } : {}),
+      };
+      // Re-read per event: the watcher appends new request threads while we run.
+      const candidate = validateApprovalReply(reply, loadPending(), validateOptions);
+      if (candidate.verdict !== "not-approval") record(candidate);
+    };
+
+    // Replay any envelope persisted-but-not-processed from a prior crash.
+    if (inbox) {
+      for (const entry of inbox.pending()) {
+        processEvent(entry.event);
+        inbox.markProcessed(entry.envelope_id);
+      }
+    }
+
     const listener = new SocketModeListener({
       appToken: readTokenFile(values["app-token-file"], "xapp-"),
-      onEvent: (event) => {
-        if (event["type"] !== "message" || typeof event["ts"] !== "string") return;
-        const reply: ApprovalReply = {
-          channel_id: String(event["channel"] ?? ""),
-          ts: String(event["ts"]),
-          ...(typeof event["thread_ts"] === "string" ? { thread_ts: event["thread_ts"] } : {}),
-          ...(typeof event["user"] === "string" ? { user: event["user"] } : {}),
-          ...(typeof event["text"] === "string" ? { text: event["text"] } : {}),
-          ...(typeof event["bot_id"] === "string" ? { bot_id: event["bot_id"] } : {}),
-          ...(typeof event["subtype"] === "string" ? { subtype: event["subtype"] } : {}),
-        };
-        // Re-read per event: the watcher appends new request threads while we run.
-        const candidate = validateApprovalReply(reply, loadPending(), validateOptions);
-        if (candidate.verdict !== "not-approval") record(candidate);
-      },
+      ...(inbox
+        ? {
+            // process-then-ack: record durably, run the side effect, mark done,
+            // all before the ack. Validation + a file append is well within
+            // Slack's response window. A crash anywhere before markProcessed is
+            // replayed on the next start; a redelivery of a processed envelope
+            // is a no-op.
+            persistBeforeAck: async (envelope): Promise<void> => {
+              const id = envelope.envelope_id;
+              const event = envelope.payload?.event;
+              if (!id || !event) return;
+              if (inbox.isProcessed(id)) return;
+              inbox.record(id, event);
+              processEvent(event);
+              inbox.markProcessed(id);
+            },
+            onEvent: () => {},
+          }
+        : { onEvent: (event: Record<string, unknown>) => processEvent(event) }),
     });
     await listener.start();
-    return `listening (shadow); candidates -> ${outPath}`;
+    return `listening (shadow${inbox ? ", durable inbox" : ""}); candidates -> ${outPath}`;
   }
 
   throw new Error("Provide --fixture (dry-run) or --app-token-file (live shadow).");
