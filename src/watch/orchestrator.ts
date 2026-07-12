@@ -24,6 +24,8 @@ export interface WatchItem {
   status: string;
   comment_bodies: string[];
   url?: string;
+  /** Current digest of the live request proposal; re-checked against the candidate's captured digest before recording. */
+  proposal_digest?: string;
 }
 
 export interface LedgerControl {
@@ -57,6 +59,8 @@ export interface PassSummary {
   done: number;
   approvals: number;
   notified: number;
+  /** Approved candidates skipped because the proposal changed since notification (digest mismatch). */
+  stale_rejected: number;
 }
 
 export class WatchOrchestrator {
@@ -82,7 +86,7 @@ export class WatchOrchestrator {
   }
 
   async pass(items: WatchItem[], candidates: CandidateApproval[] = []): Promise<PassSummary> {
-    const summary: PassSummary = { blocked: 0, done: 0, approvals: 0, notified: 0 };
+    const summary: PassSummary = { blocked: 0, done: 0, approvals: 0, notified: 0, stale_rejected: 0 };
 
     for (const item of items) {
       if (this.closedStatuses.has(item.status)) continue;
@@ -120,7 +124,20 @@ export class WatchOrchestrator {
       if (candidate.verdict !== "approved-candidate" || !candidate.ledger_ref) continue;
       const key = `${candidate.thread_key}:${candidate.reply_ts}`;
       if (this.state.has(key)) continue;
-      if (!items.some((item) => item.ref === candidate.ledger_ref)) continue;
+      const item = items.find((candidateItem) => candidateItem.ref === candidate.ledger_ref);
+      if (!item) continue;
+      // Record-time re-check: if the proposal changed since it was notified,
+      // the digest the reply approved no longer matches the live proposal.
+      // Consume the key so it does not loop; do not record the approval.
+      if (
+        candidate.proposal_digest !== undefined &&
+        item.proposal_digest !== undefined &&
+        candidate.proposal_digest !== item.proposal_digest
+      ) {
+        this.state.add(key);
+        summary.stale_rejected += 1;
+        continue;
+      }
       await this.control.recordApproval(candidate.ledger_ref, candidate);
       this.state.add(key);
       summary.approvals += 1;

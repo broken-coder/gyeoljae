@@ -46,6 +46,14 @@ export interface PendingRequest {
   /** `${channel_id}:${thread_ts}` of the thread carrying the request. */
   thread_key: string;
   ledger_ref: string;
+  /** Proposal identity captured when the request was notified (all optional for adapters that don't track it). */
+  proposal_id?: string;
+  /** Digest of the proposal text as seen at notification time; re-checked at record time by the orchestrator. */
+  proposal_digest?: string;
+  /** Monotonic proposal revision; carried onto the candidate for audit. */
+  version?: number;
+  /** Epoch seconds after which a reply no longer approves this proposal. */
+  expires_at?: number;
 }
 
 /** Returns true only for users allowed to approve. Absence of a configured authorizer is fail-closed. */
@@ -76,7 +84,8 @@ export type ApprovalReason =
   | "bot-or-system-message"
   | "missing-approver-identity"
   | "authorization-not-configured"
-  | "unauthorized-approver";
+  | "unauthorized-approver"
+  | "proposal-expired";
 
 export interface CandidateApproval {
   verdict: ApprovalVerdict;
@@ -86,6 +95,10 @@ export interface CandidateApproval {
   approver: string | null;
   /** Why the verdict fell where it did — enum-ish, content-free. */
   reason: ApprovalReason;
+  /** Proposal identity carried from the pending request, for record-time re-check and audit. */
+  proposal_id?: string;
+  proposal_digest?: string;
+  version?: number;
 }
 
 export function threadKey(channelId: string, threadTs: string): string {
@@ -142,11 +155,27 @@ export function validateApprovalReply(
     return { ...base, verdict: "needs-human", thread_key: key, ledger_ref: request.ledger_ref, reason: "unauthorized-approver" };
   }
 
+  // Time-bound: a reply after the proposal's expiry no longer approves.
+  const proposalFields = {
+    ...(request.proposal_id !== undefined ? { proposal_id: request.proposal_id } : {}),
+    ...(request.proposal_digest !== undefined ? { proposal_digest: request.proposal_digest } : {}),
+    ...(request.version !== undefined ? { version: request.version } : {}),
+  };
+  if (request.expires_at !== undefined && replySeconds(reply.ts) > request.expires_at) {
+    return { ...base, verdict: "needs-human", thread_key: key, ledger_ref: request.ledger_ref, reason: "proposal-expired", ...proposalFields };
+  }
+
   return {
     ...base,
     verdict: "approved-candidate",
     thread_key: key,
     ledger_ref: request.ledger_ref,
     reason: isShort ? "short-approval-in-request-thread" : "long-form-ref-match",
+    ...proposalFields,
   };
+}
+
+/** Slack ts ("1700000100.000001") → integer epoch seconds. */
+function replySeconds(ts: string): number {
+  return Math.floor(Number(ts));
 }
