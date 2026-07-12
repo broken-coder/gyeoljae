@@ -24,6 +24,8 @@ export interface WatchItem {
   status: string;
   comment_bodies: string[];
   url?: string;
+  /** Stable identity of the current request proposal (e.g. the request comment id); keys the notification/transition per cycle. */
+  proposal_id?: string;
   /** Current digest of the live request proposal; re-checked against the candidate's captured digest before recording. */
   proposal_digest?: string;
 }
@@ -94,26 +96,26 @@ export class WatchOrchestrator {
       const hasDone = this.hasMarker(item, this.doneMarker);
 
       if (hasDone) {
-        const key = `${item.ref}:done`;
+        const key = this.cycleKey(item, "done");
         if (item.status !== this.doneStatus && !this.state.has(key)) {
           await this.control.transition(item.ref, "done", this.transitionNote);
           this.state.add(key);
           summary.done += 1;
-          const delivered = await this.notifier.deliver([this.event(item, "done", `${item.ref}:done:watcher`)]);
+          const delivered = await this.notifier.deliver([this.event(item, "done", `${key}:watcher`)]);
           summary.notified += delivered.length;
         }
         continue;
       }
 
       if (hasRequest) {
-        const key = `${item.ref}:blocked`;
-        if (item.status !== this.blockedStatus && !this.state.has(key)) {
+        const blockedKey = this.cycleKey(item, "blocked");
+        if (item.status !== this.blockedStatus && !this.state.has(blockedKey)) {
           await this.control.transition(item.ref, "blocked", this.transitionNote);
-          this.state.add(key);
+          this.state.add(blockedKey);
           summary.blocked += 1;
         }
         const delivered = await this.notifier.deliver([
-          this.event(item, "approval-needed", `${item.ref}:approval-needed`),
+          this.event(item, "approval-needed", this.cycleKey(item, "approval-needed")),
         ]);
         summary.notified += delivered.length;
         for (const entry of delivered) this.options.onPendingThread?.(entry.receipt, item.ref);
@@ -148,6 +150,18 @@ export class WatchOrchestrator {
 
   private hasMarker(item: WatchItem, marker: string): boolean {
     return item.comment_bodies.some((body) => body.trimStart().startsWith(marker));
+  }
+
+  /**
+   * State/notification key bound to the current proposal cycle. When the source
+   * supplies proposal identity (proposal_id/proposal_digest), a second proposal
+   * on the same item produces a fresh key — so a new approval cycle re-blocks
+   * and re-notifies instead of being suppressed as a duplicate. Absent identity
+   * falls back to the ref-only key (prior behavior).
+   */
+  private cycleKey(item: WatchItem, kind: string): string {
+    const identity = item.proposal_id ?? item.proposal_digest;
+    return identity ? `${item.ref}:${kind}:${identity}` : `${item.ref}:${kind}`;
   }
 
   private event(item: WatchItem, kind: LedgerEvent["kind"], eventKey: string): LedgerEvent {

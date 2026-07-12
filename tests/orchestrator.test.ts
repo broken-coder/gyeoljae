@@ -179,3 +179,30 @@ test("matching digest records normally; absent digests fall back to prior behavi
   assert.equal(summary.approvals, 1);
   assert.deepEqual(control.approvals, [{ ref: "EX-64", reply_ts: "1700000700.000003" }]);
 });
+
+test("second proposal cycle on the same item re-notifies (event-identity keys)", async () => {
+  const { orchestrator, notifier } = rig();
+
+  // Cycle 1: proposal p1 on EX-64.
+  const c1 = await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "p1" })]);
+  assert.equal(c1.notified, 1);
+
+  // Same proposal p1 again → deduped, no new notification.
+  const same = await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "p1" })]);
+  assert.equal(same.notified, 0);
+
+  // Cycle 2: a NEW proposal p2 on the same item → must notify again.
+  const c2 = await orchestrator.pass([requestItem({ status: "open", proposal_id: "p2" })]);
+  assert.equal(c2.notified, 1, "a distinct proposal cycle is not suppressed as a duplicate");
+  assert.equal(c2.blocked, 1, "and re-blocks the item for the new cycle");
+
+  assert.equal(notifier.delivered.length, 2);
+});
+
+test("without proposal identity, keys stay ref-only (prior behavior preserved)", async () => {
+  const { orchestrator } = rig();
+  const first = await orchestrator.pass([requestItem()]);
+  const again = await orchestrator.pass([requestItem({ status: "blocked" })]);
+  assert.equal(first.notified, 1);
+  assert.equal(again.notified, 0, "ref-only key suppresses the repeat, as before");
+});
