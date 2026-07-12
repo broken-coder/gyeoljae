@@ -157,3 +157,66 @@ export class GitHubIssuesWatcher {
     return events;
   }
 }
+
+/** Watch-source + control wiring for `gyeoljae watch` on GitHub Issues. */
+import type { CandidateApproval } from "../approval/validator.js";
+import type { LedgerControl, WatchItem } from "../watch/orchestrator.js";
+
+export class GitHubWatchSource {
+  constructor(
+    private readonly api: GitHubApi,
+    private readonly owner: string,
+    private readonly repo: string,
+    private readonly blockedLabel = "blocked",
+  ) {}
+
+  async openItems(): Promise<WatchItem[]> {
+    const issues = (await this.api.request(
+      "GET",
+      `/repos/${this.owner}/${this.repo}/issues?state=open&per_page=100`,
+    )) as GitHubIssue[];
+
+    const items: WatchItem[] = [];
+    for (const issue of issues) {
+      if (issue.pull_request) continue;
+      const comments = (await this.api.request(
+        "GET",
+        `/repos/${this.owner}/${this.repo}/issues/${issue.number}/comments?per_page=100`,
+      )) as Array<{ body?: string }>;
+      items.push({
+        ref: `${this.owner}/${this.repo}#${issue.number}`,
+        title: issue.title,
+        status: issue.labels.some((label) => label.name === this.blockedLabel) ? "blocked" : "open",
+        comment_bodies: comments.map((comment) => comment.body ?? ""),
+        url: issue.html_url,
+      });
+    }
+    return items;
+  }
+}
+
+export class GitHubLedgerControl implements LedgerControl {
+  constructor(
+    private readonly api: GitHubApi,
+    private readonly ledger: GitHubIssuesLedger,
+    private readonly blockedLabel = "blocked",
+  ) {}
+
+  async transition(ref: string, to: "blocked" | "done", note: string): Promise<void> {
+    const issue = parseLedgerRef(ref);
+    const base = `/repos/${issue.owner}/${issue.repo}/issues/${issue.number}`;
+    if (to === "blocked") {
+      await this.api.request("POST", `${base}/labels`, { labels: [this.blockedLabel] });
+    } else {
+      await this.api.request("PATCH", base, { state: "closed" });
+    }
+    await this.ledger.comment(ref, `${note} -> ${to}`);
+  }
+
+  async recordApproval(ref: string, candidate: CandidateApproval): Promise<void> {
+    await this.ledger.comment(
+      ref,
+      `Chat approval recorded\n\nApproved via reply in request thread ${candidate.thread_key} (reply ts ${candidate.reply_ts}, approver ${candidate.approver ?? "unknown"}). Validation: exact short approval in the pending request thread; scope unchanged. Authority: this ledger record.`,
+    );
+  }
+}
