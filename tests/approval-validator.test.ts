@@ -146,3 +146,27 @@ test("a reply after the proposal expiry does not approve", () => {
   assert.equal(result.reason, "proposal-expired");
   assert.equal(result.proposal_id, "EX-56/p1", "identity is preserved on the rejection for audit");
 });
+
+// --- P2-a regression: expiry parsing is strict and fail-closed ---
+
+test("expiry: a reply within the expiry second (fractional) does not approve", () => {
+  // expires_at = 1700000200; reply ts 1700000200.000001 is after it.
+  const atBoundary = { ...reply("승인"), ts: "1700000200.000001" };
+  const result = validateApprovalReply(atBoundary, PENDING_WITH_PROPOSAL, AUTHZ);
+  assert.equal(result.verdict, "needs-human");
+  assert.equal(result.reason, "proposal-expired");
+});
+
+test("expiry: a malformed/non-finite reply ts fails closed", () => {
+  for (const ts of ["not-a-number", "", "NaN", "Infinity"]) {
+    const bad = { ...reply("승인"), ts };
+    const result = validateApprovalReply(bad, PENDING_WITH_PROPOSAL, AUTHZ);
+    assert.equal(result.verdict, "needs-human", ts);
+    assert.equal(result.reason, "proposal-expired", ts);
+  }
+});
+
+test("expiry: a valid reply before expiry still approves", () => {
+  const inTime = { ...reply("승인"), ts: "1700000199.999999" };
+  assert.equal(validateApprovalReply(inTime, PENDING_WITH_PROPOSAL, AUTHZ).verdict, "approved-candidate");
+});

@@ -161,8 +161,13 @@ export function validateApprovalReply(
     ...(request.proposal_digest !== undefined ? { proposal_digest: request.proposal_digest } : {}),
     ...(request.version !== undefined ? { version: request.version } : {}),
   };
-  if (request.expires_at !== undefined && replySeconds(reply.ts) > request.expires_at) {
-    return { ...base, verdict: "needs-human", thread_key: key, ledger_ref: request.ledger_ref, reason: "proposal-expired", ...proposalFields };
+  if (request.expires_at !== undefined) {
+    const seconds = replySeconds(reply.ts);
+    // Fail-closed: a malformed/non-finite reply ts, or any ts at or after the
+    // expiry, does not approve. Full-precision compare so 100.000001 > 100.
+    if (seconds === null || seconds > request.expires_at) {
+      return { ...base, verdict: "needs-human", thread_key: key, ledger_ref: request.ledger_ref, reason: "proposal-expired", ...proposalFields };
+    }
   }
 
   return {
@@ -175,7 +180,14 @@ export function validateApprovalReply(
   };
 }
 
-/** Slack ts ("1700000100.000001") → integer epoch seconds. */
-function replySeconds(ts: string): number {
-  return Math.floor(Number(ts));
+/**
+ * Slack ts ("1700000100.000001") → full-precision epoch seconds, or null when
+ * the ts is not a finite number. `expires_at` is whole epoch seconds, so a
+ * fractional reply ts within the expiry second still compares strictly greater.
+ */
+function replySeconds(ts: string): number | null {
+  const value = Number(ts);
+  // Slack ts are always large positive numbers; reject anything non-finite or
+  // non-positive ("" → 0, "NaN", "Infinity") so a malformed ts fails closed.
+  return Number.isFinite(value) && value > 0 ? value : null;
 }

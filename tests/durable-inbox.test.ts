@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -117,3 +117,19 @@ test("a persist failure skips the ack so Slack redelivers", async () => {
   assert.equal(sockets[0]!.sent.length, 0, "no ack was sent");
   listener.stop();
 });
+
+// --- P2-c regression: the journal is content-free (validated candidate only) ---
+test("inbox journal never contains raw message text", () =>
+  withDir((dir) => {
+    const inbox = new DurableInbox<{ verdict: string; thread_key: string; reply_ts: string }>(dir);
+    // The listener validates first and stores ONLY the content-free candidate.
+    // A candidate has no `text` field, so a secret in the original message
+    // cannot reach the durable journal.
+    const candidate = { verdict: "approved-candidate", thread_key: "C0EXAMPLE001:1.0", reply_ts: "2.0" };
+    inbox.record("env-secret", candidate);
+
+    const journal = readFileSync(join(dir, "inbox.jsonl"), "utf8");
+    assert.ok(!journal.includes("SECRET-BODY-XYZ"), "message text must never appear in the journal");
+    assert.ok(!journal.includes("\"text\""), "no text field is journaled");
+    assert.ok(journal.includes("env-secret"), "the content-free candidate is journaled");
+  }));
