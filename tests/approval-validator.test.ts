@@ -70,7 +70,7 @@ test("candidate output is content-free", () => {
   assert.ok(!JSON.stringify(result).includes("범위를 전체"), "reply text must never appear in the output");
 });
 
-// --- fail-closed authorization (HOM-72 item 1) ---
+// --- fail-closed authorization ---
 
 test("fail-closed: no authorizer configured never approves", () => {
   const result = validateApprovalReply(reply("승인"), PENDING);
@@ -114,7 +114,7 @@ test("short-approval phrases are configurable (drop ambiguous defaults)", () => 
   assert.equal(dropped.reason, "modified-or-widened-reply");
 });
 
-// --- proposal binding: expiry + identity carry-through (HOM-72 item 2) ---
+// --- proposal binding: expiry + identity carry-through ---
 
 const PENDING_WITH_PROPOSAL = new Map([
   [

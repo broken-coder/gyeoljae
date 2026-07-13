@@ -14,6 +14,10 @@ const PATTERNS = [
   { name: "GitHub token", regex: /gh[pousr]_[0-9A-Za-z]{20,}/ },
   { name: "private key block", regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { name: "CGNAT/Tailscale address", regex: /\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}\b/ },
+  {
+    name: "issue-tracker identifier",
+    regex: /(?<![A-Z0-9_-])(?!(?:EX|CVE)-)[A-Z][A-Z0-9]{1,9}-\d+(?![A-Z0-9_-])/,
+  },
 ];
 
 const files = execFileSync("git", ["ls-files"], { encoding: "utf8" })
