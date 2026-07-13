@@ -1,6 +1,6 @@
 {
   "name": "gyeoljae",
-  "version": "0.1.1-rc.1",
+  "version": "0.2.0-rc.1",
   "description": "Human-in-the-loop approval bridge between your ops ledger and your messenger",
   "type": "module",
   "license": "MIT",
@@ -69,7 +69,14 @@
     "README.ko.md",
     "SECURITY.md"
   ],
-  "keywords": ["slack", "approval", "human-in-the-loop", "chatops", "agents", "bridge"],
+  "keywords": [
+    "slack",
+    "approval",
+    "human-in-the-loop",
+    "chatops",
+    "agents",
+    "bridge"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -78,8 +85,9 @@
     "clean": "node scripts/clean.mjs",
     "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
     "check:sanitize": "node scripts/sanitize-check.mjs",
-    "prepack": "npm run clean && npm run build",
-    "smoke:package": "node scripts/package-smoke.mjs"
+    "prepack": "npm run clean && npm run build && node scripts/sanitize-payload.mjs",
+    "smoke:package": "node scripts/package-smoke.mjs",
+    "check:sanitize:payload": "node scripts/sanitize-payload.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

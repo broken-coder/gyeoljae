@@ -6,7 +6,7 @@
 
 > Status: early. Extracted from a private operating system where a Ruby shadow implementation has been running in production since day one. The Ruby test suite serves as the golden spec for this TypeScript port.
 
-> Release candidate: `v0.1.1-rc.1` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
+> Release candidate: `v0.2.0-rc.1` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
 
 ## Why
 
@@ -32,7 +32,7 @@ Core rules, enforced in code:
 
 - `text_excerpt` is **always null** in shadow mode; file refs are metadata-only (id, name, mime, size, hash). Contents are never read.
 - Every envelope has an idempotent `dedup_key`; replays and retries create no duplicates.
-- Notification delivery is **deduplicated at-least-once** by default (a crash after a remote send but before the checkpoint can repeat). Back the notifier with an `Outbox` for explicit pending → sending → sent state, stored receipts, and reconciliation of the post crash window.
+- Notification delivery is **deduplicated at-least-once** by default (a crash after a remote send but before the checkpoint can repeat). Back the notifier with an `Outbox` for explicit sending → sent delivery state (an event not yet claimed is implicitly pending), stored receipts, and reconciliation of the post crash window.
 - Outage recovery is **replay from chat history** after the last acknowledged timestamp — no durable queue to babysit.
 - Message edits keep their identity: same `dedup_key`, recorded `edited_ts`, incremented `version`.
 - Notifications carry ledger refs and statuses, never content.
@@ -55,7 +55,7 @@ npm run check:sanitize
 npm run smoke:package
 ```
 
-The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `v0.1.1-rc.1` package contract.
+The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `v0.2.0-rc.1` package contract.
 
 ## Docs
 
