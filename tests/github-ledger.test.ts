@@ -219,3 +219,38 @@ test("open items carry proposal identity from the latest request-marker comment"
   assert.equal(withoutProposal!.proposal_id, undefined);
   assert.equal(withoutProposal!.proposal_digest, undefined);
 });
+
+test("approval record preserves proposal identity and is idempotent (P2-e/P3-a)", async () => {
+  const { renderApprovalRecord, GitHubLedgerControl, GitHubIssuesLedger } = await import("../src/ledger/github.js");
+  const candidate = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "example-org/example-repo#7",
+    reply_ts: "1700000700.000001",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+    proposal_id: "example-org/example-repo#7/p1",
+    proposal_digest: "abc123",
+    version: 2,
+  };
+
+  const rendered = renderApprovalRecord(candidate);
+  assert.match(rendered, /proposal_id: example-org\/example-repo#7\/p1/);
+  assert.match(rendered, /proposal_digest: abc123/);
+  assert.match(rendered, /version: 2/);
+  assert.match(rendered, /<!-- gyeoljae-approval:C0EXAMPLE009:1700000601.000001:1700000700.000001 -->/);
+
+  // Idempotency: a retry sees the marker and does not post a second comment.
+  const api = new FakeApi();
+  const control = new GitHubLedgerControl(api, new GitHubIssuesLedger(api));
+  await control.recordApproval(candidate.ledger_ref, candidate);
+  const firstPosts = api.calls.filter((call) => call.method === "POST").length;
+  assert.equal(firstPosts, 1);
+
+  api.responses.set(
+    "GET /repos/example-org/example-repo/issues/7/comments?per_page=100",
+    [{ body: rendered }],
+  );
+  await control.recordApproval(candidate.ledger_ref, candidate);
+  assert.equal(api.calls.filter((call) => call.method === "POST").length, firstPosts, "no duplicate approval comment");
+});

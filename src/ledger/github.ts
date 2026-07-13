@@ -241,10 +241,45 @@ export class GitHubLedgerControl implements LedgerControl {
     await this.ledger.comment(ref, `${note} -> ${to}`);
   }
 
+  /** Idempotent on the approval's (thread, reply) identity via a hidden marker. */
   async recordApproval(ref: string, candidate: CandidateApproval): Promise<void> {
-    await this.ledger.comment(
-      ref,
-      `Chat approval recorded\n\nApproved via reply in request thread ${candidate.thread_key} (reply ts ${candidate.reply_ts}, approver ${candidate.approver ?? "unknown"}). Validation: exact short approval in the pending request thread; scope unchanged. Authority: this ledger record.`,
+    const issue = parseLedgerRef(ref);
+    const marker = approvalMarker(candidate);
+    const comments = await getAllPages<{ body?: string }>(
+      this.api,
+      `/repos/${issue.owner}/${issue.repo}/issues/${issue.number}/comments?per_page=100`,
     );
+    if (comments.some((comment) => comment.body?.includes(marker))) return;
+    await this.ledger.comment(ref, renderApprovalRecord(candidate));
   }
+}
+
+function approvalMarker(candidate: CandidateApproval): string {
+  return `<!-- gyeoljae-approval:${candidate.thread_key}:${candidate.reply_ts} -->`;
+}
+
+/**
+ * Structured, content-free approval record. Preserves the exact proposal
+ * identity (id/digest/version) the reply approved, so the approved revision is
+ * reconstructable even if the proposal is later edited. Carries no message text.
+ */
+export function renderApprovalRecord(candidate: CandidateApproval): string {
+  const identity: string[] = [];
+  if (candidate.proposal_id !== undefined) identity.push(`proposal_id: ${candidate.proposal_id}`);
+  if (candidate.proposal_digest !== undefined) identity.push(`proposal_digest: ${candidate.proposal_digest}`);
+  if (candidate.version !== undefined) identity.push(`version: ${candidate.version}`);
+  return [
+    approvalMarker(candidate),
+    "**Chat approval recorded**",
+    "",
+    "```yaml",
+    `thread_key: ${candidate.thread_key}`,
+    `reply_ts: ${candidate.reply_ts}`,
+    `approver: ${candidate.approver ?? "unknown"}`,
+    `reason: ${candidate.reason}`,
+    ...identity,
+    "```",
+    "",
+    "_Authority: this ledger record._",
+  ].join("\n");
 }
