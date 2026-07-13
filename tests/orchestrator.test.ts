@@ -206,3 +206,54 @@ test("without proposal identity, keys stay ref-only (prior behavior preserved)",
   assert.equal(first.notified, 1);
   assert.equal(again.notified, 0, "ref-only key suppresses the repeat, as before");
 });
+
+test("record-time: same digest but different proposal_id is stale (P2-b)", async () => {
+  const { control, orchestrator } = rig();
+  const candidate = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "EX-64",
+    reply_ts: "1700000700.000010",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+    proposal_id: "p1",
+    proposal_digest: "d",
+    version: 1,
+  };
+  // Live item: same digest, but a different proposal id/version (a new proposal).
+  const item = requestItem({ status: "blocked", proposal_id: "p2", proposal_digest: "d", version: 2 });
+
+  const summary = await orchestrator.pass([item], [candidate]);
+  assert.equal(summary.stale_rejected, 1);
+  assert.equal(summary.approvals, 0);
+  assert.deepEqual(control.approvals, []);
+});
+
+test("cycleKey: editing a proposal (same id, new digest) re-notifies", async () => {
+  const { orchestrator, notifier } = rig();
+  const first = await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "p1", proposal_digest: "d1" })]);
+  assert.equal(first.notified, 1);
+  // Same id, edited body → new digest → new cycle key → re-notify.
+  const edited = await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "p1", proposal_digest: "d2" })]);
+  assert.equal(edited.notified, 1, "edited proposal re-notifies");
+  assert.equal(notifier.delivered.length, 2);
+});
+
+test("strictIdentity: a candidate without proposal identity is rejected", async () => {
+  const control = new FakeControl();
+  const orchestrator = new WatchOrchestrator(control, new FakeNotifier(), new MemoryState(), { strictIdentity: true });
+  const candidate = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "EX-64",
+    reply_ts: "1700000700.000011",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+  };
+  const summary = await orchestrator.pass(
+    [requestItem({ status: "blocked", proposal_id: "p1", proposal_digest: "d1" })],
+    [candidate],
+  );
+  assert.equal(summary.stale_rejected, 1);
+  assert.deepEqual(control.approvals, []);
+});

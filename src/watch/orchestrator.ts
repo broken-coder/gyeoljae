@@ -28,6 +28,14 @@ export interface WatchItem {
   proposal_id?: string;
   /** Current digest of the live request proposal; re-checked against the candidate's captured digest before recording. */
   proposal_digest?: string;
+  /** Current proposal revision, if the source tracks it. */
+  version?: number;
+}
+
+/** Joins whatever proposal identity fields the source supplies into a stable key fragment. */
+function proposalIdentity(source: { proposal_id?: string; proposal_digest?: string; version?: number }): string | undefined {
+  const parts = [source.proposal_id, source.proposal_digest, source.version].filter((part) => part !== undefined);
+  return parts.length ? parts.join(":") : undefined;
 }
 
 export interface LedgerControl {
@@ -54,6 +62,13 @@ export interface OrchestratorOptions {
   transitionNote?: string;
   /** Called per approval-needed delivery so deployments can register the reply thread. */
   onPendingThread?: (receipt: unknown, ref: string) => void;
+  /**
+   * Require full proposal identity on both the candidate and the live item, and
+   * reject a candidate whose identity is missing or mismatched. Use in
+   * production where every request carries proposal identity; leaving it off
+   * keeps the permissive fallback for adapters that don't track identity.
+   */
+  strictIdentity?: boolean;
 }
 
 export interface PassSummary {
@@ -128,14 +143,10 @@ export class WatchOrchestrator {
       if (this.state.has(key)) continue;
       const item = items.find((candidateItem) => candidateItem.ref === candidate.ledger_ref);
       if (!item) continue;
-      // Record-time re-check: if the proposal changed since it was notified,
-      // the digest the reply approved no longer matches the live proposal.
-      // Consume the key so it does not loop; do not record the approval.
-      if (
-        candidate.proposal_digest !== undefined &&
-        item.proposal_digest !== undefined &&
-        candidate.proposal_digest !== item.proposal_digest
-      ) {
+      // Record-time re-check: if the proposal the reply approved is not the
+      // live proposal (any identity field differs, or — in strict mode —
+      // identity is missing), do not record. Consume the key so it does not loop.
+      if (this.identityMismatch(candidate, item)) {
         this.state.add(key);
         summary.stale_rejected += 1;
         continue;
@@ -153,14 +164,31 @@ export class WatchOrchestrator {
   }
 
   /**
-   * State/notification key bound to the current proposal cycle. When the source
-   * supplies proposal identity (proposal_id/proposal_digest), a second proposal
-   * on the same item produces a fresh key — so a new approval cycle re-blocks
-   * and re-notifies instead of being suppressed as a duplicate. Absent identity
-   * falls back to the ref-only key (prior behavior).
+   * True when the candidate's captured proposal identity does not match the live
+   * item. Any field present on both sides that differs is a mismatch; in strict
+   * mode, a missing proposal_id on either side is also a mismatch (fail closed).
+   */
+  private identityMismatch(candidate: CandidateApproval, item: WatchItem): boolean {
+    if (this.options.strictIdentity && (candidate.proposal_id === undefined || item.proposal_id === undefined)) {
+      return true;
+    }
+    const fields = ["proposal_id", "proposal_digest", "version"] as const;
+    return fields.some((field) => {
+      const c = candidate[field];
+      const i = item[field];
+      return c !== undefined && i !== undefined && c !== i;
+    });
+  }
+
+  /**
+   * State/notification key bound to the current proposal cycle. The identity is
+   * the full tuple (proposal_id, proposal_digest, version) so that editing a
+   * proposal (same id, new digest) or bumping its version also produces a fresh
+   * cycle — the human sees a new notification for the changed proposal. Absent
+   * any identity, this falls back to the ref-only key (prior behavior).
    */
   private cycleKey(item: WatchItem, kind: string): string {
-    const identity = item.proposal_id ?? item.proposal_digest;
+    const identity = proposalIdentity(item);
     return identity ? `${item.ref}:${kind}:${identity}` : `${item.ref}:${kind}`;
   }
 
