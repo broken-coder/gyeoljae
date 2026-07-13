@@ -82,7 +82,28 @@ test("post crash window: reconcile finds the landed post and does not resend", (
 
     const delivered = await notifier.deliver([EVENT]);
     assert.equal(chat.posts, 0, "reconcile found the post; no duplicate sent");
-    assert.equal(delivered.length, 0);
+    assert.equal(delivered.length, 1, "the reconciled event is surfaced for recovery");
     assert.equal(outbox.get(EVENT.event_key), "sent");
     assert.deepEqual(outbox.receipt(EVENT.event_key), { channel: "C0EXAMPLE009", ts: "1700000700.reconciled" });
+  }));
+
+test("post crash window: reconcile returns the receipt so recovery surfaces it", () =>
+  withDir(async (dir) => {
+    const outboxPath = join(dir, "outbox.json");
+    const crashed = new Outbox(outboxPath);
+    crashed.markSending(EVENT.event_key); // posted, crashed before markSent
+
+    const chat = new CountingChat();
+    const outbox = new Outbox(outboxPath);
+    const reconciledReceipt = { channel: "C0EXAMPLE009", ts: "1700000700.reconciled" };
+    const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), {
+      outbox,
+      reconcile: async () => reconciledReceipt,
+    });
+
+    const delivered = await notifier.deliver([EVENT]);
+    assert.equal(chat.posts, 0, "no duplicate post");
+    assert.equal(delivered.length, 1, "recovery surfaces the event so onPendingThread can fire");
+    assert.deepEqual(delivered[0]!.receipt, reconciledReceipt);
+    assert.equal(outbox.get(EVENT.event_key), "sent");
   }));

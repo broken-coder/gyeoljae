@@ -8,6 +8,7 @@ import {
   validateApprovalReply,
   type ApprovalReply,
   type Authorizer,
+  type CandidateApproval,
   type PendingRequest,
   type ValidateOptions,
 } from "../approval/validator.js";
@@ -99,10 +100,13 @@ export async function runListen(argv: string[]): Promise<string> {
     };
 
     // Optional durable inbox: store-then-ack + replay so no acked reply is lost.
-    const inbox = values["inbox-dir"] ? new DurableInbox(values["inbox-dir"]) : undefined;
+    // It journals only the content-free candidate — never the raw Slack event —
+    // so message text and metadata never reach disk.
+    const inbox = values["inbox-dir"] ? new DurableInbox<CandidateApproval>(values["inbox-dir"]) : undefined;
 
-    const processEvent = (event: Record<string, unknown>): void => {
-      if (event["type"] !== "message" || typeof event["ts"] !== "string") return;
+    // Validate an event into a content-free candidate to record, or null.
+    const toCandidate = (event: Record<string, unknown>): CandidateApproval | null => {
+      if (event["type"] !== "message" || typeof event["ts"] !== "string") return null;
       const reply: ApprovalReply = {
         channel_id: String(event["channel"] ?? ""),
         ts: String(event["ts"]),
@@ -114,13 +118,13 @@ export async function runListen(argv: string[]): Promise<string> {
       };
       // Re-read per event: the watcher appends new request threads while we run.
       const candidate = validateApprovalReply(reply, loadPending(), validateOptions);
-      if (candidate.verdict !== "not-approval") record(candidate);
+      return candidate.verdict !== "not-approval" ? candidate : null;
     };
 
-    // Replay any envelope persisted-but-not-processed from a prior crash.
+    // Replay content-free candidates persisted-but-not-processed from a prior crash.
     if (inbox) {
       for (const entry of inbox.pending()) {
-        processEvent(entry.event);
+        record(entry.payload);
         inbox.markProcessed(entry.envelope_id);
       }
     }
@@ -129,23 +133,30 @@ export async function runListen(argv: string[]): Promise<string> {
       appToken: readTokenFile(values["app-token-file"], "xapp-"),
       ...(inbox
         ? {
-            // process-then-ack: record durably, run the side effect, mark done,
-            // all before the ack. Validation + a file append is well within
-            // Slack's response window. A crash anywhere before markProcessed is
-            // replayed on the next start; a redelivery of a processed envelope
-            // is a no-op.
+            // Validate first, then persist ONLY the content-free candidate,
+            // append to output, and mark processed — all before the ack. A
+            // crash anywhere before markProcessed replays the journaled
+            // candidate on the next start; a redelivery is a no-op.
             persistBeforeAck: async (envelope): Promise<void> => {
               const id = envelope.envelope_id;
               const event = envelope.payload?.event;
               if (!id || !event) return;
               if (inbox.isProcessed(id)) return;
-              inbox.record(id, event);
-              processEvent(event);
+              const candidate = toCandidate(event);
+              if (candidate) {
+                inbox.record(id, candidate);
+                record(candidate);
+              }
               inbox.markProcessed(id);
             },
             onEvent: () => {},
           }
-        : { onEvent: (event: Record<string, unknown>) => processEvent(event) }),
+        : {
+            onEvent: (event: Record<string, unknown>) => {
+              const candidate = toCandidate(event);
+              if (candidate) record(candidate);
+            },
+          }),
     });
     await listener.start();
     return `listening (shadow${inbox ? ", durable inbox" : ""}); candidates -> ${outPath}`;

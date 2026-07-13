@@ -99,6 +99,11 @@ export class Notifier {
         const found = this.reconcile ? await this.reconcile(event) : null;
         if (found !== null && found !== undefined) {
           outbox.markSent(event.event_key, found);
+          // Surface the reconciled receipt: a crash after the post but before
+          // the checkpoint also lost any downstream use of it (e.g. registering
+          // the notification thread), so return it for the recovery pass. The
+          // downstream registration is itself idempotent.
+          delivered.push({ event, receipt: found });
           continue;
         }
       }
