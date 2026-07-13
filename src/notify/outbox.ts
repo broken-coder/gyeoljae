@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 
 /**
- * Durable notification outbox: pending → sending → sent, with the chat
+ * Durable notification outbox: sending → sent, with the chat
  * receipt stored against the event key.
  *
  * The state is written to disk BEFORE the remote post ("sending") and again
