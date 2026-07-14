@@ -32,10 +32,17 @@ export interface WatchItem {
   version?: number;
 }
 
-/** Joins whatever proposal identity fields the source supplies into a stable key fragment. */
+/**
+ * Joins whatever proposal identity fields the source supplies into a stable key
+ * fragment. Field-tagged so distinct tuples can never collide (e.g. an id of
+ * "a:b" vs an id "a" with digest "b").
+ */
 function proposalIdentity(source: { proposal_id?: string; proposal_digest?: string; version?: number }): string | undefined {
-  const parts = [source.proposal_id, source.proposal_digest, source.version].filter((part) => part !== undefined);
-  return parts.length ? parts.join(":") : undefined;
+  const parts: string[] = [];
+  if (source.proposal_id !== undefined) parts.push(`id=${source.proposal_id}`);
+  if (source.proposal_digest !== undefined) parts.push(`digest=${source.proposal_digest}`);
+  if (source.version !== undefined) parts.push(`v=${source.version}`);
+  return parts.length ? parts.join("|") : undefined;
 }
 
 export interface LedgerControl {
@@ -51,6 +58,10 @@ export interface ProcessedState {
 
 export interface NotifierLike {
   deliver(events: LedgerEvent[]): Promise<Array<{ event: LedgerEvent; receipt: unknown }>>;
+  /** Durably record an event before the transition that makes it unrepeatable (outbox-backed notifiers). */
+  enqueue?(event: LedgerEvent): void;
+  /** Retry pending/sending leftovers from a crashed pass, independent of the current items. */
+  drain?(): Promise<Array<{ event: LedgerEvent; receipt: unknown }>>;
 }
 
 export interface OrchestratorOptions {
@@ -105,6 +116,15 @@ export class WatchOrchestrator {
   async pass(items: WatchItem[], candidates: CandidateApproval[] = []): Promise<PassSummary> {
     const summary: PassSummary = { blocked: 0, done: 0, approvals: 0, notified: 0, stale_rejected: 0 };
 
+    // Drain leftovers from a crashed prior pass FIRST: a done item has left the
+    // open set, so its enqueued event exists nowhere but the outbox.
+    if (this.notifier.drain) {
+      for (const entry of await this.notifier.drain()) {
+        summary.notified += 1;
+        if (entry.event.kind === "approval-needed") this.options.onPendingThread?.(entry.receipt, entry.event.ledger_ref);
+      }
+    }
+
     for (const item of items) {
       if (this.closedStatuses.has(item.status)) continue;
       const hasRequest = this.hasMarker(item, this.requestMarker);
@@ -113,10 +133,14 @@ export class WatchOrchestrator {
       if (hasDone) {
         const key = this.cycleKey(item, "done");
         if (item.status !== this.doneStatus && !this.state.has(key)) {
+          const event = this.event(item, "done", `${key}:watcher`);
+          // Enqueue BEFORE the transition: once the item closes it leaves the
+          // open set, and the outbox copy is the only way to retry the send.
+          this.notifier.enqueue?.(event);
           await this.control.transition(item.ref, "done", this.transitionNote);
           this.state.add(key);
           summary.done += 1;
-          const delivered = await this.notifier.deliver([this.event(item, "done", `${key}:watcher`)]);
+          const delivered = await this.notifier.deliver([event]);
           summary.notified += delivered.length;
         }
         continue;
@@ -124,14 +148,14 @@ export class WatchOrchestrator {
 
       if (hasRequest) {
         const blockedKey = this.cycleKey(item, "blocked");
+        const approvalEvent = this.event(item, "approval-needed", this.cycleKey(item, "approval-needed"));
         if (item.status !== this.blockedStatus && !this.state.has(blockedKey)) {
+          this.notifier.enqueue?.(approvalEvent);
           await this.control.transition(item.ref, "blocked", this.transitionNote);
           this.state.add(blockedKey);
           summary.blocked += 1;
         }
-        const delivered = await this.notifier.deliver([
-          this.event(item, "approval-needed", this.cycleKey(item, "approval-needed")),
-        ]);
+        const delivered = await this.notifier.deliver([approvalEvent]);
         summary.notified += delivered.length;
         for (const entry of delivered) this.options.onPendingThread?.(entry.receipt, item.ref);
       }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -132,4 +132,19 @@ test("inbox journal never contains raw message text", () =>
     assert.ok(!journal.includes("SECRET-BODY-XYZ"), "message text must never appear in the journal");
     assert.ok(!journal.includes("\"text\""), "no text field is journaled");
     assert.ok(journal.includes("env-secret"), "the content-free candidate is journaled");
+  }));
+
+// --- Re-scan P2-d: a failed processed-set write must not diverge memory from disk ---
+test("markProcessed write failure leaves the id unprocessed in memory too", () =>
+  withDir((dir) => {
+    const inbox = new DurableInbox<{ v: number }>(dir);
+    inbox.record("env-x", { v: 1 });
+    // Force the temp write to fail: occupy the temp path with a directory.
+    mkdirSync(join(dir, "processed.json.tmp"));
+    assert.throws(() => inbox.markProcessed("env-x"));
+    assert.equal(inbox.isProcessed("env-x"), false, "memory did not run ahead of disk");
+    assert.equal(inbox.pending().length, 1, "still pending for this instance, same as after a restart");
+    rmSync(join(dir, "processed.json.tmp"), { recursive: true, force: true });
+    inbox.markProcessed("env-x");
+    assert.equal(inbox.isProcessed("env-x"), true);
   }));

@@ -257,3 +257,51 @@ test("strictIdentity: a candidate without proposal identity is rejected", async 
   assert.equal(summary.stale_rejected, 1);
   assert.deepEqual(control.approvals, []);
 });
+
+test("re-scan P1-a: crashed done notification is drained on the next (empty) pass", async () => {
+  // Real Notifier + Outbox + a chat that fails once: pass 1 enqueues, transitions,
+  // then the post crashes; pass 2 sees NO items (issue closed) yet still delivers.
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { Notifier } = await import("../src/notify/notifier.js");
+  const { Outbox } = await import("../src/notify/outbox.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "drain-orch-"));
+  try {
+    const chat = {
+      posts: 0,
+      failNext: true,
+      async notify(): Promise<unknown> {
+        if (this.failNext) {
+          this.failNext = false;
+          throw new Error("chat down");
+        }
+        this.posts += 1;
+        return { channel: "C0EXAMPLE009", ts: "1700000950.000001" };
+      },
+    };
+    const control = new FakeControl();
+    const state = new MemoryState();
+    const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox: new Outbox(join(dir, "outbox.json")) });
+    const orchestrator = new WatchOrchestrator(control, notifier, state);
+    const doneItem = requestItem({ comment_bodies: ["## Approval requested\n...", "## 완료\n\n완주"] });
+
+    await assert.rejects(orchestrator.pass([doneItem]), /chat down/);
+    assert.deepEqual(control.transitions, [{ ref: "EX-64", to: "done" }], "transition landed before the crash");
+
+    // Next pass: the item is closed and gone. The drain still delivers it.
+    const recovery = await orchestrator.pass([]);
+    assert.equal(recovery.notified, 1);
+    assert.equal(chat.posts, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("re-scan nit: field-tagged cycle identity cannot collide across tuples", async () => {
+  const { orchestrator, notifier } = rig();
+  await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "a:b" })]);
+  await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "a", proposal_digest: "b" })]);
+  assert.equal(notifier.delivered.length, 2, "distinct tuples get distinct cycles");
+});
