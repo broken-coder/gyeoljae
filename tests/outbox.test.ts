@@ -144,7 +144,7 @@ test("drain: sending leftovers reconcile without resending; pending leftovers po
       reconcile: async (event) => (event.event_key === sending.event_key ? landed : null),
     });
 
-    const drained = await notifier.drain();
+    const drained = await notifier.drain(() => true); // caller confirms the pending transition landed
     assert.equal(drained.length, 2);
     assert.equal(chat.posts, 1, "only the pending one posts; sending reconciled");
     assert.deepEqual(outbox.receipt(sending.event_key), landed);
@@ -158,7 +158,7 @@ test("drain: crash after enqueue but before send survives restart; sent is final
 
     const chat = new CountingChat();
     const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox: new Outbox(outboxPath) });
-    await notifier.drain();
+    await notifier.drain(() => true);
     assert.equal(chat.posts, 1);
 
     // markPending never regresses a sent record; a second drain is a no-op.
@@ -166,6 +166,29 @@ test("drain: crash after enqueue but before send survives restart; sent is final
     again.markPending(EVENT.event_key, EVENT);
     assert.equal(again.get(EVENT.event_key), "sent");
     const notifier2 = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox: again });
-    assert.equal((await notifier2.drain()).length, 0);
+    assert.equal((await notifier2.drain(() => true)).length, 0);
     assert.equal(chat.posts, 1);
+  }));
+
+// --- Review fix: pending must never send unconfirmed (false-Done protection) ---
+
+test("drain: pending without confirmation is skipped; unconfirmed pending is dropped", () =>
+  withDir(async (dir) => {
+    const outboxPath = join(dir, "outbox.json");
+    const doneEvent = { ...EVENT, event_key: "EX-1:done:watcher", kind: "done" as const };
+    new Outbox(outboxPath).markPending(doneEvent.event_key, doneEvent);
+
+    const chat = new CountingChat();
+    const outbox = new Outbox(outboxPath);
+    const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox });
+
+    // No callback: ambiguous — never send, never drop.
+    assert.equal((await notifier.drain()).length, 0);
+    assert.equal(chat.posts, 0);
+    assert.equal(outbox.get(doneEvent.event_key), "pending");
+
+    // Caller says the transition did NOT land: drop, never post a false Done.
+    assert.equal((await notifier.drain(() => false)).length, 0);
+    assert.equal(chat.posts, 0);
+    assert.equal(outbox.get(doneEvent.event_key), undefined, "dropped; the item flow owns the retry");
   }));

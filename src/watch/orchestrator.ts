@@ -60,8 +60,8 @@ export interface NotifierLike {
   deliver(events: LedgerEvent[]): Promise<Array<{ event: LedgerEvent; receipt: unknown }>>;
   /** Durably record an event before the transition that makes it unrepeatable (outbox-backed notifiers). */
   enqueue?(event: LedgerEvent): void;
-  /** Retry pending/sending leftovers from a crashed pass, independent of the current items. */
-  drain?(): Promise<Array<{ event: LedgerEvent; receipt: unknown }>>;
+  /** Retry pending/sending leftovers from a crashed pass; pending only when confirmPending returns true. */
+  drain?(confirmPending?: (event: LedgerEvent) => boolean): Promise<Array<{ event: LedgerEvent; receipt: unknown }>>;
 }
 
 export interface OrchestratorOptions {
@@ -117,9 +117,17 @@ export class WatchOrchestrator {
     const summary: PassSummary = { blocked: 0, done: 0, approvals: 0, notified: 0, stale_rejected: 0 };
 
     // Drain leftovers from a crashed prior pass FIRST: a done item has left the
-    // open set, so its enqueued event exists nowhere but the outbox.
+    // open set, so its enqueued event exists nowhere but the outbox. A pending
+    // done event is confirmed ONLY when its item is absent from the (complete)
+    // open set — the transition that closes it must actually have landed; a
+    // still-open ref means the enqueue's transition failed, so the record is
+    // dropped and the item flow below retries the whole cycle. Pending
+    // approval-needed events never send from here: while the item is open the
+    // item flow re-delivers them itself.
     if (this.notifier.drain) {
-      for (const entry of await this.notifier.drain()) {
+      const openRefs = new Set(items.map((item) => item.ref));
+      const confirmPending = (event: LedgerEvent): boolean => event.kind === "done" && !openRefs.has(event.ledger_ref);
+      for (const entry of await this.notifier.drain(confirmPending)) {
         summary.notified += 1;
         if (entry.event.kind === "approval-needed") this.options.onPendingThread?.(entry.receipt, entry.event.ledger_ref);
       }
@@ -189,14 +197,17 @@ export class WatchOrchestrator {
 
   /**
    * True when the candidate's captured proposal identity does not match the live
-   * item. Any field present on both sides that differs is a mismatch; in strict
-   * mode, a missing proposal_id on either side is also a mismatch (fail closed).
+   * item. Any field present on both sides that differs is a mismatch. In strict
+   * mode the FULL tuple is enforced: proposal_id must exist on both sides and
+   * every identity field must be present on both sides or neither — a candidate
+   * carrying less identity than the live item (or more) is rejected fail-closed.
    */
   private identityMismatch(candidate: CandidateApproval, item: WatchItem): boolean {
-    if (this.options.strictIdentity && (candidate.proposal_id === undefined || item.proposal_id === undefined)) {
-      return true;
-    }
     const fields = ["proposal_id", "proposal_digest", "version"] as const;
+    if (this.options.strictIdentity) {
+      if (candidate.proposal_id === undefined || item.proposal_id === undefined) return true;
+      if (fields.some((field) => (candidate[field] === undefined) !== (item[field] === undefined))) return true;
+    }
     return fields.some((field) => {
       const c = candidate[field];
       const i = item[field];

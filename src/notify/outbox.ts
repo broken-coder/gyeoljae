@@ -7,7 +7,9 @@ import { dirname } from "node:path";
  *
  * "pending" is claimed durably BEFORE the ledger transition that makes the
  * event unrepeatable (a done item leaves the open set, so a later pass can
- * never rebuild its event). "sending" is written before the remote post and
+ * never rebuild its event). Because the transition may still FAIL after the
+ * enqueue, a pending record is only ever sent once the drain caller confirms
+ * the transition landed; otherwise it is dropped and the item flow retries. "sending" is written before the remote post and
  * "sent" after it succeeds; a crash between post and confirmation leaves the
  * key in "sending" — a known-uncertain state the Notifier reconciles instead
  * of blindly resending. Unsent entries carry their event so `drain()` can
@@ -58,6 +60,11 @@ export class Outbox {
     const kept = event ?? this.records.get(eventKey)?.event;
     this.records.set(eventKey, { state: "sending", ...(kept !== undefined ? { event: kept } : {}) });
     this.flush();
+  }
+
+  /** Remove an unsent record whose transition never landed; the item flow owns the retry. */
+  drop(eventKey: string): void {
+    if (this.records.delete(eventKey)) this.flush();
   }
 
   /** Confirm the post landed and store its receipt; the event is no longer needed. */
