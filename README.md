@@ -63,7 +63,7 @@ The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `
 - [Cookbook](docs/cookbook/README.md) — wiring AI agents into the approval loop, end-to-end deployment recipes
 - [Token-file hardening](docs/security/token-files.md) — ownership, permissions, symlink checks, and rotation
 - [Local JSON state](docs/deployment/local-json-state.md) — required single-writer deployment contract
-- [Release notes](docs/releases/v0.1.1-rc.1.md) — Developer Preview limitations and upgrade notes
+- [Release notes](docs/releases/v0.2.0-rc.1.md) — Developer Preview limitations and upgrade notes
 
 ## Roadmap
 
