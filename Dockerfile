@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
 COPY tests ./tests
+COPY scripts/sanitize-check.mjs ./scripts/sanitize-check.mjs
 RUN npm ci --no-fund --no-audit && npm run build && node --test "dist/tests/**/*.test.js"
 
 # Runtime stage: dist only — gyeoljae has zero runtime dependencies.
