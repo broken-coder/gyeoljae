@@ -1,5 +1,6 @@
 # Build stage
 FROM node:22-alpine AS build
+RUN apk add --no-cache git
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 COPY src ./src
