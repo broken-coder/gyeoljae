@@ -257,3 +257,130 @@ test("strictIdentity: a candidate without proposal identity is rejected", async 
   assert.equal(summary.stale_rejected, 1);
   assert.deepEqual(control.approvals, []);
 });
+
+test("re-scan P1-a: crashed done notification is drained on the next (empty) pass", async () => {
+  // Real Notifier + Outbox + a chat that fails once: pass 1 enqueues, transitions,
+  // then the post crashes; pass 2 sees NO items (issue closed) yet still delivers.
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { Notifier } = await import("../src/notify/notifier.js");
+  const { Outbox } = await import("../src/notify/outbox.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "drain-orch-"));
+  try {
+    const chat = {
+      posts: 0,
+      failNext: true,
+      async notify(): Promise<unknown> {
+        if (this.failNext) {
+          this.failNext = false;
+          throw new Error("chat down");
+        }
+        this.posts += 1;
+        return { channel: "C0EXAMPLE009", ts: "1700000950.000001" };
+      },
+    };
+    const control = new FakeControl();
+    const state = new MemoryState();
+    const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox: new Outbox(join(dir, "outbox.json")) });
+    const orchestrator = new WatchOrchestrator(control, notifier, state);
+    const doneItem = requestItem({ comment_bodies: ["## Approval requested\n...", "## 완료\n\n완주"] });
+
+    await assert.rejects(orchestrator.pass([doneItem]), /chat down/);
+    assert.deepEqual(control.transitions, [{ ref: "EX-64", to: "done" }], "transition landed before the crash");
+
+    // Next pass: the item is closed and gone. The drain still delivers it.
+    const recovery = await orchestrator.pass([]);
+    assert.equal(recovery.notified, 1);
+    assert.equal(chat.posts, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("re-scan nit: field-tagged cycle identity cannot collide across tuples", async () => {
+  const { orchestrator, notifier } = rig();
+  await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "a:b" })]);
+  await orchestrator.pass([requestItem({ status: "blocked", proposal_id: "a", proposal_digest: "b" })]);
+  assert.equal(notifier.delivered.length, 2, "distinct tuples get distinct cycles");
+});
+
+test("review fix P1: a failed done transition never yields a false Done notification", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { Notifier } = await import("../src/notify/notifier.js");
+  const { Outbox } = await import("../src/notify/outbox.js");
+
+  const dir = mkdtempSync(join(tmpdir(), "false-done-"));
+  try {
+    const chat = { posts: 0, async notify(): Promise<unknown> { this.posts += 1; return { ts: "1.0" }; } };
+    let failTransitions = 2;
+    const control = {
+      transitions: 0,
+      async transition(): Promise<void> {
+        if (failTransitions > 0) { failTransitions -= 1; throw new Error("ledger down"); }
+        this.transitions += 1;
+      },
+      async recordApproval(): Promise<void> {},
+    };
+    const notifier = new Notifier(chat, "#ex", join(dir, "state.json"), { outbox: new Outbox(join(dir, "outbox.json")) });
+    const orchestrator = new WatchOrchestrator(control, notifier, new MemoryState());
+    const doneItem = requestItem({ comment_bodies: ["## Approval requested\n...", "## 완료\n\n완주"] });
+
+    // Pass 1: enqueue lands, transition FAILS. The item stays open.
+    await assert.rejects(orchestrator.pass([doneItem]), /ledger down/);
+    assert.equal(chat.posts, 0);
+
+    // Pass 2: the item is STILL OPEN — the drained pending must be dropped,
+    // not posted ("✅ Done" for an open item is the reviewer's repro).
+    // The item flow retries the transition, which fails again.
+    await assert.rejects(orchestrator.pass([doneItem]), /ledger down/);
+    assert.equal(chat.posts, 0, "no false Done while the item is open");
+
+    // Pass 3: ledger recovers — transition lands, then exactly one notification.
+    const recovered = await orchestrator.pass([doneItem]);
+    assert.equal(control.transitions, 1);
+    assert.equal(recovered.done, 1);
+    assert.equal(recovered.notified, 1);
+    assert.equal(chat.posts, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("review fix P2: strictIdentity enforces the full tuple's presence, both directions", async () => {
+  const fullItem = requestItem({ status: "blocked", proposal_id: "p1", proposal_digest: "d1", version: 1 });
+  const base = {
+    verdict: "approved-candidate" as const,
+    thread_key: "C0EXAMPLE009:1700000601.000001",
+    ledger_ref: "EX-64",
+    approver: "UAPPROVER",
+    reason: "short-approval-in-request-thread" as const,
+  };
+
+  // Reviewer repro: candidate carries id only, live item carries id+digest+version.
+  { const control = new FakeControl();
+    const orchestrator = new WatchOrchestrator(control, new FakeNotifier(), new MemoryState(), { strictIdentity: true });
+    const s = await orchestrator.pass([fullItem], [{ ...base, reply_ts: "1700000700.000021", proposal_id: "p1" }]);
+    assert.equal(s.stale_rejected, 1);
+    assert.deepEqual(control.approvals, []); }
+
+  // Candidate carrying MORE identity than the item is rejected too.
+  { const control = new FakeControl();
+    const orchestrator = new WatchOrchestrator(control, new FakeNotifier(), new MemoryState(), { strictIdentity: true });
+    const s = await orchestrator.pass(
+      [requestItem({ status: "blocked", proposal_id: "p1" })],
+      [{ ...base, reply_ts: "1700000700.000022", proposal_id: "p1", proposal_digest: "d1", version: 1 }],
+    );
+    assert.equal(s.stale_rejected, 1);
+    assert.deepEqual(control.approvals, []); }
+
+  // Full matching tuple still records.
+  { const control = new FakeControl();
+    const orchestrator = new WatchOrchestrator(control, new FakeNotifier(), new MemoryState(), { strictIdentity: true });
+    const s = await orchestrator.pass([fullItem], [{ ...base, reply_ts: "1700000700.000023", proposal_id: "p1", proposal_digest: "d1", version: 1 }]);
+    assert.equal(s.approvals, 1);
+    assert.equal(control.approvals.length, 1); }
+});

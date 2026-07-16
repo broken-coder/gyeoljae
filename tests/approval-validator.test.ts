@@ -170,3 +170,11 @@ test("expiry: a valid reply before expiry still approves", () => {
   const inTime = { ...reply("승인"), ts: "1700000199.999999" };
   assert.equal(validateApprovalReply(inTime, PENDING_WITH_PROPOSAL, AUTHZ).verdict, "approved-candidate");
 });
+
+test("expiry: non-canonical numeric formats fail closed (re-scan)", () => {
+  for (const ts of ["1e2", "0x64", " 1700000100", "+1700000100", "-1", "1700000100.000001.9"]) {
+    const result = validateApprovalReply({ ...reply("승인"), ts }, PENDING_WITH_PROPOSAL, AUTHZ);
+    assert.equal(result.verdict, "needs-human", ts);
+    assert.equal(result.reason, "proposal-expired", ts);
+  }
+});

@@ -186,8 +186,10 @@ export function validateApprovalReply(
  * fractional reply ts within the expiry second still compares strictly greater.
  */
 function replySeconds(ts: string): number | null {
+  // Slack ts are canonical "<seconds>.<fraction>" decimals. Reject any other
+  // shape ("", "NaN", "1e10", "0x64", signs, whitespace) so a malformed ts
+  // fails closed rather than riding Number()'s permissive parsing.
+  if (!/^\d+(\.\d+)?$/.test(ts)) return null;
   const value = Number(ts);
-  // Slack ts are always large positive numbers; reject anything non-finite or
-  // non-positive ("" → 0, "NaN", "Infinity") so a malformed ts fails closed.
   return Number.isFinite(value) && value > 0 ? value : null;
 }

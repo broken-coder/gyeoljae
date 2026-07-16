@@ -70,6 +70,56 @@ export class Notifier {
     return this.outbox ? this.deliverViaOutbox(events, this.outbox) : this.deliverViaSeenSet(events);
   }
 
+  /**
+   * Durably record an event BEFORE the ledger transition it announces. A done
+   * transition closes the item, so no later pass can rebuild its event: the
+   * outbox copy is the only thing that lets drain() retry a crashed send.
+   * No-op without an outbox (seen-set mode keeps prior semantics).
+   */
+  enqueue(event: LedgerEvent): void {
+    this.outbox?.markPending(event.event_key, event);
+  }
+
+  /**
+   * Retry leftovers from a crashed pass, independent of the current items.
+   *
+   * "sending" leftovers already passed their transition (markSending only runs
+   * inside deliver, after it) — reconciled first, then resent (at-least-once).
+   * "pending" leftovers are ambiguous: the transition they announce may have
+   * FAILED after the enqueue. They are sent only when `confirmPending`
+   * confirms the transition landed; when it returns false the record is
+   * dropped (the item flow owns the retry — a send here would announce a
+   * transition that never happened). Without the callback, pending is skipped.
+   */
+  async drain(confirmPending?: (event: LedgerEvent) => boolean): Promise<Array<{ event: LedgerEvent; receipt: unknown }>> {
+    if (!this.outbox) return [];
+    const delivered: Array<{ event: LedgerEvent; receipt: unknown }> = [];
+    for (const entry of this.outbox.unsent()) {
+      if (entry.event === undefined) continue; // legacy record without a stored event: nothing to rebuild
+      const event = entry.event as LedgerEvent;
+      if (entry.state === "pending") {
+        if (!confirmPending) continue;
+        if (!confirmPending(event)) {
+          this.outbox.drop(event.event_key);
+          continue;
+        }
+      }
+      if (entry.state === "sending") {
+        const found = this.reconcile ? await this.reconcile(event) : null;
+        if (found !== null && found !== undefined) {
+          this.outbox.markSent(event.event_key, found);
+          delivered.push({ event, receipt: found });
+          continue;
+        }
+      }
+      this.outbox.markSending(event.event_key, event);
+      const receipt = await this.chat.notify(this.channel, renderNotification(event));
+      this.outbox.markSent(event.event_key, receipt);
+      delivered.push({ event, receipt });
+    }
+    return delivered;
+  }
+
   private async deliverViaSeenSet(events: LedgerEvent[]): Promise<Array<{ event: LedgerEvent; receipt: unknown }>> {
     const seen = new Set(this.readState());
     const delivered: Array<{ event: LedgerEvent; receipt: unknown }> = [];
@@ -108,7 +158,7 @@ export class Notifier {
         }
       }
 
-      outbox.markSending(event.event_key); // durable intent BEFORE the post
+      outbox.markSending(event.event_key, event); // durable intent (with the event, for drain) BEFORE the post
       const receipt = await this.chat.notify(this.channel, renderNotification(event));
       outbox.markSent(event.event_key, receipt);
       delivered.push({ event, receipt });

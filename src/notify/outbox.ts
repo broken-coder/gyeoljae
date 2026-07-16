@@ -2,20 +2,33 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname } from "node:path";
 
 /**
- * Durable notification outbox: sending → sent, with the chat
- * receipt stored against the event key.
+ * Durable notification outbox: pending → sending → sent, with the event and
+ * the chat receipt stored against the event key.
  *
- * The state is written to disk BEFORE the remote post ("sending") and again
- * after it succeeds ("sent"). A crash between post and confirmation leaves the
- * key in "sending" — a known-uncertain state the Notifier can reconcile
- * instead of blindly resending. Single-writer; the file is replaced
- * atomically via a temp-file rename.
+ * "pending" is claimed durably BEFORE the ledger transition that makes the
+ * event unrepeatable (a done item leaves the open set, so a later pass can
+ * never rebuild its event). Because the transition may still FAIL after the
+ * enqueue, a pending record is only ever sent once the drain caller confirms
+ * the transition landed; otherwise it is dropped and the item flow retries. "sending" is written before the remote post and
+ * "sent" after it succeeds; a crash between post and confirmation leaves the
+ * key in "sending" — a known-uncertain state the Notifier reconciles instead
+ * of blindly resending. Unsent entries carry their event so `drain()` can
+ * retry them even when the originating item no longer appears in a pass.
+ * Single-writer; the file is replaced atomically via a temp-file rename.
  */
-export type OutboxState = "sending" | "sent";
+export type OutboxState = "pending" | "sending" | "sent";
 
 interface OutboxRecord {
   state: OutboxState;
   receipt?: unknown;
+  /** The notification event, kept until sent so crashed sends can be drained. */
+  event?: unknown;
+}
+
+export interface UnsentEntry {
+  event_key: string;
+  state: OutboxState;
+  event?: unknown;
 }
 
 export class Outbox {
@@ -35,16 +48,39 @@ export class Outbox {
     return this.records.get(eventKey)?.receipt;
   }
 
-  /** Claim intent to send, durably, before the remote post. */
-  markSending(eventKey: string): void {
-    this.records.set(eventKey, { state: "sending" });
+  /** Durably record the event before the transition that makes it unrepeatable. */
+  markPending(eventKey: string, event: unknown): void {
+    if (this.records.has(eventKey)) return; // never regress sending/sent
+    this.records.set(eventKey, { state: "pending", event });
     this.flush();
   }
 
-  /** Confirm the post landed and store its receipt. */
+  /** Claim intent to send, durably, before the remote post. */
+  markSending(eventKey: string, event?: unknown): void {
+    const kept = event ?? this.records.get(eventKey)?.event;
+    this.records.set(eventKey, { state: "sending", ...(kept !== undefined ? { event: kept } : {}) });
+    this.flush();
+  }
+
+  /** Remove an unsent record whose transition never landed; the item flow owns the retry. */
+  drop(eventKey: string): void {
+    if (this.records.delete(eventKey)) this.flush();
+  }
+
+  /** Confirm the post landed and store its receipt; the event is no longer needed. */
   markSent(eventKey: string, receipt: unknown): void {
     this.records.set(eventKey, { state: "sent", receipt });
     this.flush();
+  }
+
+  /** Entries left pending/sending by a crashed pass, for the Notifier to drain. */
+  unsent(): UnsentEntry[] {
+    const entries: UnsentEntry[] = [];
+    for (const [eventKey, record] of this.records) {
+      if (record.state === "sent") continue;
+      entries.push({ event_key: eventKey, state: record.state, ...(record.event !== undefined ? { event: record.event } : {}) });
+    }
+    return entries;
   }
 
   private flush(): void {
