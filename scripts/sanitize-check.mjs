@@ -12,6 +12,23 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+// Keep this list narrow: every entry weakens issue-tracker leak detection.
+export const ALLOWED_PUBLIC_IDENTIFIER_PREFIXES = Object.freeze([
+  "CVE",
+  "EX",
+  "GPT",
+  "HTTP",
+  "ISO",
+  "RFC",
+  "SHA",
+  "TLS",
+  "UTF",
+]);
+
+const ISSUE_TRACKER_IDENTIFIER_REGEX = new RegExp(
+  String.raw`(?<![A-Z0-9_-])(?!(?:${ALLOWED_PUBLIC_IDENTIFIER_PREFIXES.join("|")})-)[A-Z][A-Z0-9]{1,9}-\d+(?![A-Z0-9_-])`,
+);
+
 export const PATTERNS = [
   { name: "Slack token", regex: /xox[baprs]-[0-9A-Za-z-]{10,}/ },
   { name: "Slack app-level token", regex: /xapp-1-[0-9A-Za-z-]{10,}/ },
@@ -20,7 +37,7 @@ export const PATTERNS = [
   { name: "CGNAT/Tailscale address", regex: /\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}\b/ },
   {
     name: "issue-tracker identifier",
-    regex: /(?<![A-Z0-9_-])(?!(?:EX|CVE)-)[A-Z][A-Z0-9]{1,9}-\d+(?![A-Z0-9_-])/,
+    regex: ISSUE_TRACKER_IDENTIFIER_REGEX,
   },
 ];
 

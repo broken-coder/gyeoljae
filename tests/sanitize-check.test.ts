@@ -21,6 +21,21 @@ test("sanitize gate permits documented EX example identifiers", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("sanitize gate permits common public technical identifiers", () => {
+  const identifiers = [
+    ["SHA", "256"],
+    ["UTF", "8"],
+    ["ISO", "8601"],
+    ["HTTP", "2"],
+    ["TLS", "13"],
+    ["RFC", "9110"],
+    ["GPT", "4"],
+  ].map((parts) => parts.join("-"));
+  const result = runSanitizer(`Public identifiers:\n${identifiers.join("\n")}\n`);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("sanitize gate does not mistake regex character classes for issue identifiers", () => {
   const result = runSanitizer("const pattern = /[A-Z0-9.]+/;\n");
 
