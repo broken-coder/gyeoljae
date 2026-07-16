@@ -21,6 +21,38 @@ test("sanitize gate permits documented EX example identifiers", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("sanitize gate permits common public technical identifiers", () => {
+  const identifiers = [
+    ["SHA", "256"],
+    ["UTF", "8"],
+    ["ISO", "8601"],
+    ["HTTP", "2"],
+    ["TLS", "13"],
+    ["RFC", "9110"],
+    ["GPT", "4"],
+  ].map((parts) => parts.join("-"));
+  const result = runSanitizer(`Public identifiers:\n${identifiers.join("\n")}\n`);
+
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("sanitize gate rejects identifiers that only extend an allowed prefix", () => {
+  const identifiers = [
+    ["RFCX", "9110"],
+    ["SHAX", "1"],
+    ["ISO9", "1"],
+    ["UTF8X", "1"],
+    ["EXT", "5"],
+  ].map((parts) => parts.join("-"));
+
+  for (const identifier of identifiers) {
+    const result = runSanitizer(`Near-prefix tracker reference: ${identifier}\n`);
+
+    assert.equal(result.status, 1, `${identifier} should be rejected`);
+    assert.match(result.stderr, /issue-tracker identifier/);
+  }
+});
+
 test("sanitize gate does not mistake regex character classes for issue identifiers", () => {
   const result = runSanitizer("const pattern = /[A-Z0-9.]+/;\n");
 
