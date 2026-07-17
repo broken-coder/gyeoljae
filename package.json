@@ -1,6 +1,6 @@
 {
   "name": "gyeoljae",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.0",
   "description": "Human-in-the-loop approval bridge between your ops ledger and your messenger",
   "type": "module",
   "license": "MIT",

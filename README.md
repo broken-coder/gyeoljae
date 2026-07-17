@@ -6,7 +6,7 @@
 
 > Status: early. Extracted from a private operating system where a Ruby shadow implementation has been running in production since day one. The Ruby test suite serves as the golden spec for this TypeScript port.
 
-> Release candidate: `v0.2.0-rc.2` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
+> Current release: `v0.2.0` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
 
 ## Why
 
@@ -55,7 +55,7 @@ npm run check:sanitize
 npm run smoke:package
 ```
 
-The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `v0.2.0-rc.2` package contract.
+The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `v0.2.0` package contract.
 
 ## Docs
 
@@ -63,7 +63,7 @@ The package is ESM-only. Use `import`; CommonJS `require()` is not part of the `
 - [Cookbook](docs/cookbook/README.md) — wiring AI agents into the approval loop, end-to-end deployment recipes
 - [Token-file hardening](docs/security/token-files.md) — ownership, permissions, symlink checks, and rotation
 - [Local JSON state](docs/deployment/local-json-state.md) — required single-writer deployment contract
-- [Release notes](docs/releases/v0.2.0-rc.2.md) — Developer Preview limitations and upgrade notes
+- [Release notes](docs/releases/v0.2.0.md) — release scope, operational limitations, and upgrade notes
 
 ## Roadmap
 

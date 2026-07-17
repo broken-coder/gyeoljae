@@ -2,7 +2,7 @@
 
 A minimal end-to-end deployment using only public parts: GitHub Issues as the ledger, Slack as the chat surface, one bridge process on an interval.
 
-> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.2.0-rc.2`. The poller and listener can write only local files. The `gyeoljae-watch` CLI keeps chat output local but performs live GitHub ledger transitions when it finds workflow markers.
+> Status note: the inbound poller, GitHub watcher, outbound notifier, and Socket Mode listener ship in `v0.2.0`. The poller and listener can write only local files. The `gyeoljae-watch` CLI keeps chat output local but performs live GitHub ledger transitions when it finds workflow markers.
 
 ## What you need
 
@@ -12,10 +12,10 @@ A minimal end-to-end deployment using only public parts: GitHub Issues as the le
 
 Keep tokens in [hardened files](../security/token-files.md); gyeoljae reads them in place and never logs them. Keep each local checkpoint under the [single-writer contract](../deployment/local-json-state.md).
 
-Install the exact release candidate on the scheduled host and record each CLI's absolute path:
+Install the exact release on the scheduled host and record each CLI's absolute path:
 
 ```bash
-npm install --global gyeoljae@0.2.0-rc.2
+npm install --global gyeoljae@0.2.0
 command -v gyeoljae-poll
 ```
 
@@ -88,7 +88,7 @@ Run `gyeoljae-watch --candidates <file>` only after reviewing the GitHub write c
 
 ## GitHub pagination limits
 
-Each watch pass reads every open issue and every comment page. If GitHub rejects any page, including for rate limiting, the entire pass fails and the next scheduled pass starts from the beginning. Keep the operating ledger focused, monitor API quota, and avoid overlapping passes. Retry/backoff and bounded-page controls are not part of `v0.2.0-rc.2`.
+Each watch pass reads every open issue and every comment page. If GitHub rejects any page, including for rate limiting, the entire pass fails and the next scheduled pass starts from the beginning. Keep the operating ledger focused, monitor API quota, and avoid overlapping passes. Retry/backoff and bounded-page controls are not part of `v0.2.0`.
 
 ## Safety checklist before going live
 
