@@ -5,8 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = process.cwd();
-const rootVersion = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+const rootPackage = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const rootVersion = rootPackage.version;
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+for (const [name, target] of Object.entries(rootPackage.bin ?? {})) {
+  if (target.startsWith("./") || target.includes("\\")) {
+    throw new Error(`${name} must use npm's canonical package-relative bin path.`);
+  }
+}
 const scratch = mkdtempSync(join(tmpdir(), "gyeoljae-package-smoke-"));
 const packDir = join(scratch, "pack");
 const installDir = join(scratch, "blank-project");

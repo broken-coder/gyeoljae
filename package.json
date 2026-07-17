@@ -1,6 +1,6 @@
 {
   "name": "gyeoljae",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "description": "Human-in-the-loop approval bridge between your ops ledger and your messenger",
   "type": "module",
   "license": "MIT",
@@ -56,9 +56,9 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "gyeoljae-poll": "./dist/src/cli/poll.js",
-    "gyeoljae-listen": "./dist/src/cli/listen.js",
-    "gyeoljae-watch": "./dist/src/cli/watch.js"
+    "gyeoljae-poll": "dist/src/cli/poll.js",
+    "gyeoljae-listen": "dist/src/cli/listen.js",
+    "gyeoljae-watch": "dist/src/cli/watch.js"
   },
   "files": [
     "dist/src",
