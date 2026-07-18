@@ -12,7 +12,7 @@ A minimal end-to-end deployment using only public parts: GitHub Issues as the le
 
 Keep tokens in [hardened files](../security/token-files.md); gyeoljae reads them in place and never logs them. Keep each local checkpoint under the [single-writer contract](../deployment/local-json-state.md).
 
-Install the exact release on the scheduled host and record each CLI's absolute path:
+After `gyeoljae@0.2.0` is published, install that exact release on the scheduled host and record each CLI's absolute path:
 
 ```bash
 npm install --global gyeoljae@0.2.0

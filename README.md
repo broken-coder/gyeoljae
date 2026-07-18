@@ -6,7 +6,7 @@
 
 > Status: early. Extracted from a private operating system where a Ruby shadow implementation has been running in production since day one. The Ruby test suite serves as the golden spec for this TypeScript port.
 
-> Current release: `v0.2.0` packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
+> The `v0.2.0` release packages the library and `poll`/`listen`/`watch` CLIs. Public envelopes strip both source text and `redacted_text` after [PR #13](https://github.com/broken-coder/gyeoljae/pull/13).
 
 ## Why
 

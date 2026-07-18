@@ -6,7 +6,7 @@
 
 > 상태: 초기 단계. 사설 운영 시스템에서 실제 가동 중인 Ruby 구현을 golden spec 삼아 TypeScript로 이식 중입니다.
 
-> 현재 릴리스: `v0.2.0`은 라이브러리와 `poll`/`listen`/`watch` CLI를 패키징합니다. [PR #13](https://github.com/broken-coder/gyeoljae/pull/13) 이후 public envelope에서는 source text와 `redacted_text`를 모두 제거합니다.
+> `v0.2.0` 릴리스는 라이브러리와 `poll`/`listen`/`watch` CLI를 패키징합니다. [PR #13](https://github.com/broken-coder/gyeoljae/pull/13) 이후 public envelope에서는 source text와 `redacted_text`를 모두 제거합니다.
 
 ## 왜 필요한가
 

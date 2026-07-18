@@ -1,6 +1,6 @@
 # Getting started
 
-> gyeoljae is early-stage. `v0.2.0` ships the core library, `poll`/`listen`/`watch` CLIs, notifier, Slack Socket Mode listener, and GitHub Issues adapter. The watch CLI uses a local chat outbox but performs live GitHub label/comment/close transitions when it sees workflow markers.
+> gyeoljae is early-stage. The `v0.2.0` release includes the core library, `poll`/`listen`/`watch` CLIs, notifier, Slack Socket Mode listener, and GitHub Issues adapter. The watch CLI uses a local chat outbox but performs live GitHub label/comment/close transitions when it sees workflow markers.
 
 ## The mental model in 60 seconds
 
