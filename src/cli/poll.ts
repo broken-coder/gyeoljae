@@ -95,8 +95,8 @@ function required(value: string | undefined, flag: string): string {
 
 function readState(path: string | undefined): string | undefined {
   if (!path || !existsSync(path)) return undefined;
-  const state = JSON.parse(readFileSync(path, "utf8")) as { last_ack_ts?: string };
-  return state.last_ack_ts;
+  const state = JSON.parse(readFileSync(path, "utf8")) as { last_ack_ts?: string | null };
+  return state.last_ack_ts ?? undefined;
 }
 
 /** Advances to the newest processed ts; an empty run keeps the previous ack. */
