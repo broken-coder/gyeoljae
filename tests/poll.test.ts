@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -33,11 +33,12 @@ test("a null state checkpoint is treated as no checkpoint", async () => {
       "--out",
       outPath,
     ]);
+
+    assert.equal(calls.length, 1);
+    assert.ok(!calls[0]!.includes("oldest="), calls[0]);
+    assert.equal(JSON.parse(readFileSync(outPath, "utf8")).last_ack_ts, null);
   } finally {
     globalThis.fetch = originalFetch;
+    rmSync(dir, { recursive: true, force: true });
   }
-
-  assert.equal(calls.length, 1);
-  assert.ok(!calls[0]!.includes("oldest="), calls[0]);
-  assert.equal(JSON.parse(readFileSync(outPath, "utf8")).last_ack_ts, null);
 });
